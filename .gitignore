@@ -1,0 +1,16 @@
+# Build artifacts
+Makefile
+*.o
+harbour-shadowline
+RPMS/
+rpms/
+
+# sfdk / SDK
+.sfdk/
+
+# Qt / qmake
+*.pro.user
+
+# OS
+.DS_Store
+Thumbs.db
