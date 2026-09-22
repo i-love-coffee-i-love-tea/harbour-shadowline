@@ -154,23 +154,6 @@ ListItem {
             }
         }
 
-        Row {
-            width: parent.width
-            spacing: Theme.paddingMedium
-
-            Label {
-                text: qsTr("Status")
-                color: Theme.secondaryColor
-                font.pixelSize: Theme.fontSizeSmall
-                width: parent.width * 0.5
-            }
-            Label {
-                text: _isNight ? qsTr("Night") : qsTr("Day")
-                color: _isNight ? Theme.secondaryHighlightColor : Theme.highlightColor
-                font.pixelSize: Theme.fontSizeSmall
-            }
-        }
-
         Item { width: 1; height: Theme.paddingSmall }
     }
 
