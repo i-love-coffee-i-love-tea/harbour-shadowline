@@ -1,0 +1,9 @@
+[Desktop Entry]
+Exec=harbour-shadowline
+Icon=harbour-shadowline
+Type=Application
+Name=Shadow Line
+X-Nemo-Application-Type=silica-qt5
+X-Sailjail-OrganizationName=harbour-shadowline
+X-Sailjail-ApplicationName=harbour-shadowline
+X-Sailjail-Permissions=UserDirs

@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>harbour-shadowline</id>
+  <name>Shadow Line</name>
+  <summary>Interactive globe showing real-time daylight and sunrise/sunset times</summary>
+  <description>
+    <p>Shadow Line displays an interactive 3D globe with the day/night terminator
+    showing where sunlight currently falls on Earth. Configure your favourite
+    locations to see their sunrise and sunset times at a glance.</p>
+    <p>Spin the globe by dragging horizontally. Add locations from a list of
+    major world cities or enter custom coordinates.</p>
+  </description>
+  <url type="homepage">https://github.com/gobuki/harbour-shadowline</url>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>MIT</project_license>
+  <releases>
+    <release version="1.0.0" date="2026-01-01">
+      <description><p>Initial release.</p></description>
+    </release>
+  </releases>
+</component>
