@@ -10,6 +10,7 @@ Page {
     property var db: null
     property var locationList: []
     property int _refreshTick: 0
+    property int _expandedIndex: -1
 
     // --- Database ---
     function openDb() {
@@ -77,21 +78,35 @@ Page {
 
     function loadCenterLongitude() {
         openDb();
-        var lon = 30.0; // default: roughly Europe-centered
+        var lon = 30.0;
         db.readTransaction(function(tx) {
             var rs = tx.executeSql("SELECT value FROM settings WHERE key='centerLon'");
-            if (rs.rows.length > 0) {
-                lon = parseFloat(rs.rows.item(0).value);
-            }
+            if (rs.rows.length > 0) lon = parseFloat(rs.rows.item(0).value);
         });
         return lon;
+    }
+
+    function loadCenterLatitude() {
+        openDb();
+        var lat = 25.0;
+        db.readTransaction(function(tx) {
+            var rs = tx.executeSql("SELECT value FROM settings WHERE key='centerLat'");
+            if (rs.rows.length > 0) lat = parseFloat(rs.rows.item(0).value);
+        });
+        return lat;
     }
 
     function saveCenterLongitude(lon) {
         openDb();
         db.transaction(function(tx) {
-            tx.executeSql("INSERT OR REPLACE INTO settings (key, value) VALUES ('centerLon', ?)",
-                          [lon.toString()]);
+            tx.executeSql("INSERT OR REPLACE INTO settings (key, value) VALUES ('centerLon', ?)", [lon.toString()]);
+        });
+    }
+
+    function saveCenterLatitude(lat) {
+        openDb();
+        db.transaction(function(tx) {
+            tx.executeSql("INSERT OR REPLACE INTO settings (key, value) VALUES ('centerLat', ?)", [lat.toString()]);
         });
     }
 
@@ -147,11 +162,10 @@ Page {
                     id: globe
                     anchors.fill: parent
                     centerLongitude: mainPage.loadCenterLongitude()
+                    centerLatitude: mainPage.loadCenterLatitude()
 
-                    onCenterLongitudeChanged: {
-                        // Debounced save
-                        saveTimer.restart()
-                    }
+                    onCenterLongitudeChanged: saveTimer.restart()
+                    onCenterLatitudeChanged: saveTimer.restart()
                 }
 
                 // Spin button — bottom-right of globe
@@ -173,7 +187,10 @@ Page {
             Timer {
                 id: saveTimer
                 interval: 1000
-                onTriggered: mainPage.saveCenterLongitude(globe.centerLongitude)
+                onTriggered: {
+                    mainPage.saveCenterLongitude(globe.centerLongitude);
+                    mainPage.saveCenterLatitude(globe.centerLatitude);
+                }
             }
 
             // Separator
@@ -211,13 +228,18 @@ Page {
                     locationName: modelData.name
                     locationLat: modelData.lat
                     locationLon: modelData.lon
+                    _expanded: _expandedIndex === index
 
                     property int _refresh: _refreshTick
                     on_RefreshChanged: refresh()
 
                     onClicked: {
-                        _expanded = !_expanded;
-                        if (_expanded) globe.flyTo(locationLat, locationLon);
+                        if (_expandedIndex === index) {
+                            _expandedIndex = -1;
+                        } else {
+                            _expandedIndex = index;
+                            globe.flyTo(locationLat, locationLon);
+                        }
                     }
 
                     menu: Component {

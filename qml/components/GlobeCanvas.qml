@@ -26,6 +26,14 @@ Item {
     }
 
     NumberAnimation {
+        id: flyLatAnim
+        target: globe
+        property: "centerLatitude"
+        duration: 600
+        easing.type: Easing.InOutQuad
+    }
+
+    NumberAnimation {
         id: spinAnim
         target: globe
         property: "centerLongitude"
@@ -36,13 +44,16 @@ Item {
     function flyTo(lat, lon) {
         selectedLat = lat;
         selectedLon = lon;
-        var cur = centerLongitude;
-        var diff = lon - cur;
+        var curLon = centerLongitude;
+        var diff = lon - curLon;
         while (diff > 180) diff -= 360;
         while (diff < -180) diff += 360;
-        flyAnim.from = cur;
-        flyAnim.to = cur + diff;
+        flyAnim.from = curLon;
+        flyAnim.to = curLon + diff;
         flyAnim.start();
+        flyLatAnim.from = centerLatitude;
+        flyLatAnim.to = lat;
+        flyLatAnim.start();
     }
 
     function clearSelection() {
@@ -69,6 +80,7 @@ Item {
         renderStrategy: Canvas.Cooperative
 
         property real _lon: globe.centerLongitude
+        property real _lat: globe.centerLatitude
         property real _selLon: globe.selectedLon
         property int _tick: 0
 
@@ -266,12 +278,14 @@ Item {
 
         on_TickChanged: requestPaint()
         on_LonChanged: requestPaint()
+        on_LatChanged: requestPaint()
         on_SelLonChanged: requestPaint()
     }
 
     MouseArea {
         anchors.fill: parent
         property real _lastX: 0
+        property real _lastY: 0
         property bool _dragging: false
         preventStealing: true
 
@@ -279,15 +293,22 @@ Item {
             spinAnim.stop();
             flyAnim.stop();
             _lastX = mouse.x;
+            _lastY = mouse.y;
             _dragging = true;
         }
         onPositionChanged: {
             if (!_dragging) return;
             var dx = mouse.x - _lastX;
+            var dy = mouse.y - _lastY;
             globe.centerLongitude -= dx * 0.3;
+            globe.centerLatitude += dy * 0.3;
+            // Clamp latitude
+            if (globe.centerLatitude > 90) globe.centerLatitude = 90;
+            if (globe.centerLatitude < -90) globe.centerLatitude = -90;
             while (globe.centerLongitude > 180) globe.centerLongitude -= 360;
             while (globe.centerLongitude < -180) globe.centerLongitude += 360;
             _lastX = mouse.x;
+            _lastY = mouse.y;
         }
         onReleased: _dragging = false
         onCanceled: _dragging = false
