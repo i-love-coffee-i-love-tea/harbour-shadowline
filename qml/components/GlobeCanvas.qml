@@ -287,22 +287,30 @@ Item {
         property real _lastX: 0
         property real _lastY: 0
         property bool _dragging: false
-        preventStealing: true
+
+        Timer {
+            id: tapTimer
+            interval: 200
+            onTriggered: globe.spin()
+        }
 
         onPressed: {
             spinAnim.stop();
             flyAnim.stop();
             _lastX = mouse.x;
             _lastY = mouse.y;
-            _dragging = true;
+            _dragging = false;
+            tapTimer.start();
         }
         onPositionChanged: {
-            if (!_dragging) return;
             var dx = mouse.x - _lastX;
             var dy = mouse.y - _lastY;
+            if (Math.abs(dx) > 5 || Math.abs(dy) > 5) {
+                _dragging = true;
+                tapTimer.stop();
+            }
             globe.centerLongitude -= dx * 0.3;
             globe.centerLatitude += dy * 0.3;
-            // Clamp latitude
             if (globe.centerLatitude > 90) globe.centerLatitude = 90;
             if (globe.centerLatitude < -90) globe.centerLatitude = -90;
             while (globe.centerLongitude > 180) globe.centerLongitude -= 360;
@@ -310,8 +318,8 @@ Item {
             _lastX = mouse.x;
             _lastY = mouse.y;
         }
-        onReleased: _dragging = false
-        onCanceled: _dragging = false
+        onReleased: { _dragging = false; tapTimer.stop(); }
+        onCanceled: { _dragging = false; tapTimer.stop(); }
     }
 
     function repaint() { canvas.requestPaint(); }
