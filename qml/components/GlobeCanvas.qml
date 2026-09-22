@@ -273,6 +273,7 @@ Item {
         anchors.fill: parent
         property real _lastX: 0
         property bool _dragging: false
+        preventStealing: true
 
         onPressed: {
             spinAnim.stop();

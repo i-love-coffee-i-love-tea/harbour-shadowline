@@ -215,7 +215,10 @@ Page {
                     property int _refresh: _refreshTick
                     on_RefreshChanged: refresh()
 
-                    onClicked: globe.flyTo(locationLat, locationLon)
+                    onClicked: {
+                        _expanded = !_expanded;
+                        if (_expanded) globe.flyTo(locationLat, locationLon);
+                    }
 
                     menu: Component {
                         ContextMenu {

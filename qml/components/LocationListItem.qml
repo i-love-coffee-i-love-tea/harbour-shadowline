@@ -10,22 +10,29 @@ ListItem {
     property real locationLat: 0
     property real locationLon: 0
     property bool _isNight: false
+    property bool _expanded: false
+    property string _dayLength: ""
+    property string _solarNoon: ""
+    property string _sunAltitude: ""
 
-    contentHeight: Theme.itemSizeMedium
+    contentHeight: _expanded ? Theme.itemSizeMedium + detailsColumn.height + Theme.paddingSmall : Theme.itemSizeMedium
+
+    // onClicked handled by MainPage delegate for flyTo + expand
 
     Row {
+        id: mainRow
         anchors {
             left: parent.left
             leftMargin: Theme.horizontalPageMargin
             right: parent.right
             rightMargin: Theme.horizontalPageMargin
-            verticalCenter: parent.verticalCenter
+            top: parent.top
+            topMargin: Theme.paddingSmall
         }
         spacing: Theme.paddingMedium
 
         // Day/night icon
         Image {
-            id: dayNightIcon
             width: Theme.iconSizeMedium
             height: Theme.iconSizeMedium
             anchors.verticalCenter: parent.verticalCenter
@@ -34,7 +41,7 @@ ListItem {
 
         // Location name + coordinates
         Column {
-            width: parent.width - dayNightIcon.width - timesColumn.width - 2 * Theme.paddingMedium
+            width: parent.width - Theme.iconSizeMedium - timesColumn.width - 2 * Theme.paddingMedium
             anchors.verticalCenter: parent.verticalCenter
 
             Label {
@@ -93,6 +100,93 @@ ListItem {
         }
     }
 
+    // Expandable details
+    Column {
+        id: detailsColumn
+        visible: _expanded
+        anchors {
+            left: parent.left
+            leftMargin: Theme.horizontalPageMargin
+            right: parent.right
+            rightMargin: Theme.horizontalPageMargin
+            top: mainRow.bottom
+            topMargin: Theme.paddingSmall
+        }
+        spacing: Theme.paddingSmall
+
+        Separator {
+            width: parent.width
+            color: Theme.highlightColor
+            horizontalAlignment: Qt.AlignLeft
+        }
+
+        Row {
+            width: parent.width
+            spacing: Theme.paddingMedium
+
+            Label {
+                text: qsTr("Day length")
+                color: Theme.secondaryColor
+                font.pixelSize: Theme.fontSizeSmall
+                width: parent.width * 0.5
+            }
+            Label {
+                text: _dayLength
+                color: Theme.primaryColor
+                font.pixelSize: Theme.fontSizeSmall
+            }
+        }
+
+        Row {
+            width: parent.width
+            spacing: Theme.paddingMedium
+
+            Label {
+                text: qsTr("Solar noon")
+                color: Theme.secondaryColor
+                font.pixelSize: Theme.fontSizeSmall
+                width: parent.width * 0.5
+            }
+            Label {
+                text: _solarNoon
+                color: Theme.primaryColor
+                font.pixelSize: Theme.fontSizeSmall
+            }
+        }
+
+        Row {
+            width: parent.width
+            spacing: Theme.paddingMedium
+
+            Label {
+                text: qsTr("Status")
+                color: Theme.secondaryColor
+                font.pixelSize: Theme.fontSizeSmall
+                width: parent.width * 0.5
+            }
+            Label {
+                text: _isNight ? qsTr("Night") : qsTr("Day")
+                color: _isNight ? Theme.secondaryHighlightColor : Theme.highlightColor
+                font.pixelSize: Theme.fontSizeSmall
+            }
+        }
+
+        Item { width: 1; height: Theme.paddingSmall }
+    }
+
+    function _formatDuration(minutes) {
+        var h = Math.floor(minutes / 60);
+        var m = Math.round(minutes % 60);
+        return h + "h " + m + "m";
+    }
+
+    function _formatHM(date) {
+        if (!date) return "--:--";
+        var h = date.getHours();
+        var m = date.getMinutes();
+        return (h < 10 ? "0" : "") + h + ":" + (m < 10 ? "0" : "") + m;
+    }
+
     function updateTimes() {
         var now = new Date();
         var data = Solar.solarData(now, locationLat, locationLon);
@@ -100,15 +194,22 @@ ListItem {
             sunriseLabel.text = qsTr("Polar day");
             sunsetLabel.text = "";
             _isNight = false;
+            _dayLength = "24h 0m";
+            _solarNoon = "--:--";
         } else if (data.polarNight) {
             sunriseLabel.text = qsTr("Polar night");
             sunsetLabel.text = "";
             _isNight = true;
+            _dayLength = "0h 0m";
+            _solarNoon = "--:--";
         } else {
             sunriseLabel.text = Solar.formatTime(data.sunrise);
             sunsetLabel.text = Solar.formatTime(data.sunset);
-            // Check if current time is between sunrise and sunset
             _isNight = (now < data.sunrise || now > data.sunset);
+
+            var diffMs = data.sunset.getTime() - data.sunrise.getTime();
+            _dayLength = _formatDuration(diffMs / 60000);
+            _solarNoon = _formatHM(data.solarNoon);
         }
     }
 
