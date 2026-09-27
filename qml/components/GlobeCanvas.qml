@@ -196,19 +196,46 @@ Item {
                 ctx.fill();
             }
 
-            // --- 5. Location dots ---
+            // --- 5. Location markers ---
             var locs = globe.locations;
             for (var li = 0; li < locs.length; li++) {
                 var loc = locs[li];
                 var lp = Proj.project(loc.lat, loc.lon, cLat, cLon, R, cx, cy);
                 if (lp) {
+                    // Outer glow
                     ctx.beginPath();
-                    ctx.arc(lp.x, lp.y, 3.5, 0, Math.PI * 2);
-                    ctx.fillStyle = Theme.primaryColor;
+                    ctx.arc(lp.x, lp.y, 12, 0, Math.PI * 2);
+                    ctx.fillStyle = "rgba(255, 255, 255, 0.15)";
                     ctx.fill();
-                    ctx.strokeStyle = Theme.highlightColor;
-                    ctx.lineWidth = 1;
+
+                    // Inner glow
+                    ctx.beginPath();
+                    ctx.arc(lp.x, lp.y, 8, 0, Math.PI * 2);
+                    ctx.fillStyle = "rgba(255, 255, 255, 0.25)";
+                    ctx.fill();
+
+                    // Shadow
+                    ctx.beginPath();
+                    ctx.arc(lp.x + 1, lp.y + 1, 5, 0, Math.PI * 2);
+                    ctx.fillStyle = "rgba(0, 0, 0, 0.4)";
+                    ctx.fill();
+
+                    // Main dot
+                    ctx.beginPath();
+                    ctx.arc(lp.x, lp.y, 5, 0, Math.PI * 2);
+                    ctx.fillStyle = Theme.highlightColor;
+                    ctx.fill();
+
+                    // White ring
+                    ctx.lineWidth = 1.2;
+                    ctx.strokeStyle = "rgba(255, 255, 255, 0.8)";
                     ctx.stroke();
+
+                    // Specular dot
+                    ctx.beginPath();
+                    ctx.arc(lp.x - 1.5, lp.y - 1.5, 1.8, 0, Math.PI * 2);
+                    ctx.fillStyle = "rgba(255, 255, 255, 0.9)";
+                    ctx.fill();
                 }
             }
 
@@ -290,6 +317,14 @@ Item {
         preventStealing: true
 
         onPressed: {
+            // Only handle touches inside the globe circle;
+            // let touches outside pass through for pull-down menu
+            var dx = mouse.x - globe._cx;
+            var dy = mouse.y - globe._cy;
+            if (dx * dx + dy * dy > globe._radius * globe._radius) {
+                mouse.accepted = false;
+                return;
+            }
             spinAnim.stop();
             flyAnim.stop();
             _lastX = mouse.x;

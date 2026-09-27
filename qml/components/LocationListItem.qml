@@ -60,8 +60,9 @@ ListItem {
             }
 
             Label {
-                text: qsTr("Day") + " " + _dayLength
-                      + (_timeUntilChange !== "" ? "  \u2022  " + _timeUntilChange : "")
+                text: _timeUntilChange !== ""
+                      ? qsTr("in %1: %2 (%3)").arg(_timeUntilChange).arg(_isNight ? qsTr("day") : qsTr("night")).arg(_dayLength)
+                      : (_dayLength !== "" ? qsTr("day %1").arg(_dayLength) : "")
                 color: Theme.secondaryColor
                 font.pixelSize: Theme.fontSizeExtraSmall
             }

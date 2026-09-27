@@ -28,6 +28,45 @@ function project(lat, lon, centerLat, centerLon, radius, cx, cy) {
     return { x: cx + x, y: cy - y, visible: true };
 }
 
+// Interpolate between two lat/lon points along a great circle arc.
+// Returns an array of [lon, lat] pairs (including endpoints).
+// maxDeg: maximum angular spacing between interpolated points.
+function greatCircleInterpolate(lat1, lon1, lat2, lon2, maxDeg) {
+    // Cheap early exit: if bounding box is small, skip trig entirely
+    var dLat = Math.abs(lat2 - lat1);
+    var dLon = Math.abs(lon2 - lon1);
+    if (dLon > 180) dLon = 360 - dLon;
+    if (dLat < maxDeg && dLon < maxDeg)
+        return [[lon1, lat1], [lon2, lat2]];
+
+    var r1 = lat1 * DEG, r2 = lat2 * DEG;
+    var l1 = lon1 * DEG, l2 = lon2 * DEG;
+    var x1 = Math.cos(r1) * Math.cos(l1), y1 = Math.cos(r1) * Math.sin(l1), z1 = Math.sin(r1);
+    var x2 = Math.cos(r2) * Math.cos(l2), y2 = Math.cos(r2) * Math.sin(l2), z2 = Math.sin(r2);
+    var dot = x1*x2 + y1*y2 + z1*z2;
+    if (dot > 1) dot = 1; if (dot < -1) dot = -1;
+    var omega = Math.acos(dot);
+    var dist = omega / DEG;
+    var steps = Math.max(1, Math.ceil(dist / maxDeg));
+    var sinOmega = Math.sin(omega);
+    var result = [];
+    for (var i = 0; i <= steps; i++) {
+        var t = i / steps;
+        var s1, s2;
+        if (sinOmega < 1e-10) {
+            s1 = 1 - t; s2 = t;
+        } else {
+            s1 = Math.sin((1 - t) * omega) / sinOmega;
+            s2 = Math.sin(t * omega) / sinOmega;
+        }
+        var xi = s1 * x1 + s2 * x2;
+        var yi = s1 * y1 + s2 * y2;
+        var zi = s1 * z1 + s2 * z2;
+        result.push([Math.atan2(yi, xi) / DEG, Math.atan2(zi, Math.sqrt(xi*xi + yi*yi)) / DEG]);
+    }
+    return result;
+}
+
 // Compute the terminator path as an array of {x,y} points
 // For a given date, returns night-side polygon points in screen coords
 function terminatorPoints(date, centerLat, centerLon, radius, cx, cy) {
