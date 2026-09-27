@@ -1,7 +1,7 @@
 TARGET = harbour-shadowline
 
 CONFIG += sailfishapp
-QT += quick qml
+QT += quick qml positioning
 
 SOURCES += src/main.cpp
 

@@ -1,8 +1,9 @@
 [Desktop Entry]
-Exec=harbour-shadowline
+Exec=harbour-shadowline %u
 Icon=harbour-shadowline
 Type=Application
 Name=Shadow Line
+MimeType=x-scheme-handler/geo;
 X-Nemo-Application-Type=silica-qt5
 X-Sailjail-OrganizationName=harbour-shadowline
 X-Sailjail-ApplicationName=harbour-shadowline

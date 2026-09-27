@@ -1,7 +1,6 @@
 import QtQuick 2.6
 import Sailfish.Silica 1.0
 import "../js/solar.js" as Solar
-import "../js/projection.js" as Proj
 
 ListItem {
     id: locationItem
@@ -130,13 +129,6 @@ ListItem {
         return h + "h " + m + "m";
     }
 
-    function _formatHM(date) {
-        if (!date) return "--:--";
-        var h = date.getHours();
-        var m = date.getMinutes();
-        return (h < 10 ? "0" : "") + h + ":" + (m < 10 ? "0" : "") + m;
-    }
-
     function _getLocalTime(tz, lon) {
         var now = new Date();
         if (tz) {
@@ -151,7 +143,9 @@ ListItem {
                     else if (parts[i].type === 'minute') m = parseInt(parts[i].value);
                 }
                 return (h < 10 ? "0" : "") + h + ":" + (m < 10 ? "0" : "") + m;
-            } catch (e) {}
+            } catch (e) {
+                console.warn("LocationListItem: Intl.DateTimeFormat failed for tz='" + tz + "' (" + e.message + ")");
+            }
         }
         var utcMs = now.getTime() + now.getTimezoneOffset() * 60000;
         var offsetH = Math.round(lon / 15);
@@ -169,10 +163,21 @@ ListItem {
         return m + "m";
     }
 
+    function _computeNextChangeTime(now, data) {
+        if (_isNight) {
+            if (now > data.sunset) {
+                var tomorrow = new Date(now.getTime() + 86400000);
+                var tomorrowData = Solar.solarData(tomorrow, locationLat, locationLon);
+                return tomorrowData.sunrise ? tomorrowData.sunrise.getTime() : null;
+            }
+            return data.sunrise ? data.sunrise.getTime() : null;
+        }
+        return data.sunset ? data.sunset.getTime() : null;
+    }
+
     function updateTimes() {
         var now = new Date();
         var data = Solar.solarData(now, locationLat, locationLon);
-
         _currentTime = _getLocalTime(locationTz, locationLon);
 
         if (data.polarDay) {
@@ -183,7 +188,10 @@ ListItem {
             _dayLength = "24h 0m";
             _nextChangeEvent = "";
             _timeUntilChange = "";
-        } else if (data.polarNight) {
+            return;
+        }
+
+        if (data.polarNight) {
             sunriseLabel.text = qsTr("Polar night");
             sunsetLabel.text = "";
             solarNoonLabel.text = "--:--";
@@ -191,31 +199,23 @@ ListItem {
             _dayLength = "0h 0m";
             _nextChangeEvent = "";
             _timeUntilChange = "";
+            return;
+        }
+
+        // Normal case
+        sunriseLabel.text = Solar.formatTime(data.sunrise);
+        sunsetLabel.text = Solar.formatTime(data.sunset);
+        solarNoonLabel.text = Solar.formatTime(data.solarNoon);
+        _isNight = (now < data.sunrise || now > data.sunset);
+
+        var diffMs = data.sunset.getTime() - data.sunrise.getTime();
+        _dayLength = _formatDuration(diffMs / 60000);
+
+        var nextChangeMs = _computeNextChangeTime(now, data);
+        if (nextChangeMs !== null) {
+            _timeUntilChange = _formatCountdown(nextChangeMs - now.getTime());
         } else {
-            sunriseLabel.text = Solar.formatTime(data.sunrise);
-            sunsetLabel.text = Solar.formatTime(data.sunset);
-            solarNoonLabel.text = _formatHM(data.solarNoon);
-            _isNight = (now < data.sunrise || now > data.sunset);
-
-            var diffMs = data.sunset.getTime() - data.sunrise.getTime();
-            _dayLength = _formatDuration(diffMs / 60000);
-
-            // Time until next day/night change
-            if (_isNight) {
-                var nextSunrise;
-                if (now > data.sunset) {
-                    var tomorrow = new Date(now.getTime() + 86400000);
-                    var tomorrowData = Solar.solarData(tomorrow, locationLat, locationLon);
-                    nextSunrise = tomorrowData.sunrise;
-                } else {
-                    nextSunrise = data.sunrise;
-                }
-                if (nextSunrise) {
-                    _timeUntilChange = _formatCountdown(nextSunrise.getTime() - now.getTime());
-                }
-            } else {
-                _timeUntilChange = _formatCountdown(data.sunset.getTime() - now.getTime());
-            }
+            _timeUntilChange = "";
         }
     }
 

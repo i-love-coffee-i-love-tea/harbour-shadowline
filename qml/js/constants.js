@@ -1,0 +1,76 @@
+.pragma library
+
+var DEG = Math.PI / 180;
+
+// --- Database ---
+var DB_NAME = "harbour-shadowline";
+var DB_VERSION = "1.0";
+var DB_DESCRIPTION = "Shadow Line locations";
+var DB_SIZE = 1000000;
+
+// --- Defaults ---
+var DEFAULT_CENTER_LON = 30.0;
+var DEFAULT_CENTER_LAT = 25.0;
+
+// --- Globe rendering ---
+var GLOBE_HEIGHT_FRACTION = 0.45;
+var GLOBE_MARGIN = 4;
+var NIGHT_SCANLINE_STEP = 6;
+var NIGHT_OPACITY = 0.45;
+var DRAG_SENSITIVITY = 0.3;
+
+// Coastline / border
+var COASTLINE_LINE_WIDTH = 1.2;
+var COASTLINE_LINE_JOIN = "round";
+var BORDER_LINE_WIDTH = 0.7;
+var BORDER_LINE_JOIN = "round";
+var BORDER_ALPHA = 0.35;
+
+// Sun marker
+var SUN_OUTER_RADIUS = 9;
+var SUN_OUTER_ALPHA = 0.3;
+var SUN_INNER_RADIUS = 5;
+
+// Location marker
+var LOC_OUTER_GLOW_RADIUS = 12;
+var LOC_OUTER_GLOW_ALPHA = 0.15;
+var LOC_INNER_GLOW_RADIUS = 8;
+var LOC_INNER_GLOW_ALPHA = 0.25;
+var LOC_SHADOW_RADIUS = 5;
+var LOC_SHADOW_ALPHA = 0.4;
+var LOC_SHADOW_OFFSET = 1;
+var LOC_DOT_RADIUS = 5;
+var LOC_RING_LINE_WIDTH = 1.2;
+var LOC_RING_ALPHA = 0.8;
+var LOC_SPECULAR_RADIUS = 1.8;
+var LOC_SPECULAR_OFFSET = 1.5;
+var LOC_SPECULAR_ALPHA = 0.9;
+
+// Selected pin
+var PIN_LENGTH_RATIO = 0.25;
+var PIN_LINE_WIDTH = 2;
+var PIN_SHADOW_LINE_WIDTH = 2.5;
+var PIN_SHADOW_ALPHA = 0.3;
+var PIN_SHADOW_OFFSET = 1;
+var PIN_TIP_RADIUS = 5;
+var PIN_TIP_SPECULAR_RADIUS = 2;
+var PIN_TIP_SPECULAR_OFFSET = 1.5;
+var PIN_TIP_SPECULAR_ALPHA = 0.4;
+var PIN_ANCHOR_RADIUS = 4;
+
+// Globe ring
+var GLOBE_RING_LINE_WIDTH = 1.5;
+var GLOBE_RING_ALPHA = 0.4;
+
+// --- Timers (ms) ---
+var AUTO_REFRESH_INTERVAL = 60000;
+var COVER_REFRESH_INTERVAL = 300000;
+var SAVE_DEBOUNCE_INTERVAL = 1000;
+
+// --- Cover canvas ---
+var COVER_CANVAS_SIZE = 80;
+var COVER_SUN_RADIUS = 12;
+var COVER_RAY_INNER = 18;
+var COVER_RAY_OUTER = 26;
+var COVER_RAY_LINE_WIDTH = 2;
+var COVER_RAY_COUNT = 8;

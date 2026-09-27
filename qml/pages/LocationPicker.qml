@@ -1,5 +1,7 @@
 import QtQuick 2.6
+import QtPositioning 5.2
 import Sailfish.Silica 1.0
+import "../js/cities.js" as Cities
 
 Page {
     id: pickerPage
@@ -7,265 +9,9 @@ Page {
     // Signal emitted when a location is selected: {name, lat, lon}
     signal locationSelected(var location)
 
-    // All existing location names for duplicate checking
-    property var existingNames: []
+    property bool _nameManuallyEdited: false
 
-    // World capitals
-    readonly property var cityTz: ({
-        "Abu Dhabi":"Asia/Dubai","Abuja":"Africa/Lagos","Accra":"Africa/Accra",
-        "Addis Ababa":"Africa/Addis_Ababa","Algiers":"Africa/Algiers","Amman":"Asia/Amman",
-        "Amsterdam":"Europe/Amsterdam","Ankara":"Europe/Istanbul","Antananarivo":"Indian/Antananarivo",
-        "Apia":"Pacific/Apia","Ashgabat":"Asia/Ashgabat","Asmara":"Africa/Asmara",
-        "Astana":"Asia/Almaty","Athens":"Europe/Athens","Baghdad":"Asia/Baghdad",
-        "Baku":"Asia/Baku","Bamako":"Africa/Bamako","Bandar Seri Begawan":"Asia/Brunei",
-        "Bangkok":"Asia/Bangkok","Bangui":"Africa/Bangui","Banjul":"Africa/Banjul",
-        "Basseterre":"America/St_Kitts","Beijing":"Asia/Shanghai","Beirut":"Asia/Beirut",
-        "Belgrade":"Europe/Belgrade","Belmopan":"America/Belize","Berlin":"Europe/Berlin",
-        "Bern":"Europe/Zurich","Bishkek":"Asia/Bishkek","Bissau":"Africa/Bissau",
-        "Bogotá":"America/Bogota","Brasília":"America/Sao_Paulo","Bratislava":"Europe/Bratislava",
-        "Brazzaville":"Africa/Brazzaville","Bridgetown":"America/Barbados","Brussels":"Europe/Brussels",
-        "Bucharest":"Europe/Bucharest","Budapest":"Europe/Budapest","Buenos Aires":"America/Argentina/Buenos_Aires",
-        "Cairo":"Africa/Cairo","Canberra":"Australia/Sydney","Caracas":"America/Caracas",
-        "Castries":"America/St_Lucia","Copenhagen":"Europe/Copenhagen","Conakry":"Africa/Conakry",
-        "Dakar":"Africa/Dakar","Damascus":"Asia/Damascus","Dhaka":"Asia/Dhaka",
-        "Dili":"Asia/Dili","Djibouti":"Africa/Djibouti","Dodoma":"Africa/Dar_es_Salaam",
-        "Doha":"Asia/Qatar","Dublin":"Europe/Dublin","Dushanbe":"Asia/Dushanbe",
-        "Edinburgh":"Europe/London","Freetown":"Africa/Freetown","Funafuti":"Pacific/Funafuti",
-        "Gaborone":"Africa/Gaborone","Gaza City":"Asia/Gaza","George Town":"America/Cayman",
-        "Georgetown":"America/Guyana","Guatemala City":"America/Guatemala","Hanoi":"Asia/Ho_Chi_Minh",
-        "Harare":"Africa/Harare","Havana":"America/Havana","Helsinki":"Europe/Helsinki",
-        "Honiara":"Pacific/Guadalcanal","Islamabad":"Asia/Karachi","Jakarta":"Asia/Jakarta",
-        "Jerusalem":"Asia/Jerusalem","Kabul":"Asia/Kabul","Kampala":"Africa/Kampala",
-        "Kathmandu":"Asia/Kathmandu","Khartoum":"Africa/Khartoum","Kigali":"Africa/Kigali",
-        "Kingston":"America/Jamaica","Kingstown":"America/St_Vincent","Kinshasa":"Africa/Kinshasa",
-        "Kuala Lumpur":"Asia/Kuala_Lumpur","Kuwait City":"Asia/Kuwait","Kyiv":"Europe/Kiev",
-        "La Paz":"America/La_Paz","Libreville":"Africa/Libreville","Lilongwe":"Africa/Blantyre",
-        "Lima":"America/Lima","Lisbon":"Europe/Lisbon","Ljubljana":"Europe/Ljubljana",
-        "Lomé":"Africa/Lome","London":"Europe/London","Luanda":"Africa/Luanda",
-        "Lusaka":"Africa/Lusaka","Luxembourg":"Europe/Luxembourg","Madrid":"Europe/Madrid",
-        "Majuro":"Pacific/Majuro","Malabo":"Africa/Malabo","Malé":"Indian/Maldives",
-        "Managua":"America/Managua","Manama":"Asia/Bahrain","Manila":"Asia/Manila",
-        "Maputo":"Africa/Maputo","Maseru":"Africa/Maseru","Mbabane":"Africa/Mbabane",
-        "Mexico City":"America/Mexico_City","Minsk":"Europe/Minsk","Mogadishu":"Africa/Mogadishu",
-        "Monrovia":"Africa/Monrovia","Montevideo":"America/Montevideo","Moroni":"Indian/Comoro",
-        "Moscow":"Europe/Moscow","Muscat":"Asia/Muscat","Nairobi":"Africa/Nairobi",
-        "Nassau":"America/Nassau","Naypyidaw":"Asia/Yangon","New Delhi":"Asia/Kolkata",
-        "Niamey":"Africa/Niamey","Nicosia":"Asia/Nicosia","Nouakchott":"Africa/Nouakchott",
-        "Nuku'alofa":"Pacific/Tongatapu","Nuuk":"America/Godthab","Oslo":"Europe/Oslo",
-        "Ottawa":"America/Toronto","Ouagadougou":"Africa/Ouagadougou","Palikir":"Pacific/Pohnpei",
-        "Panama City":"America/Panama","Paramaribo":"America/Paramaribo","Paris":"Europe/Paris",
-        "Phnom Penh":"Asia/Phnom_Penh","Podgorica":"Europe/Podgorica",
-        "Port-au-Prince":"America/Port-au-Prince","Port Louis":"Indian/Mauritius",
-        "Port Moresby":"Pacific/Port_Moresby","Port Vila":"Pacific/Efate",
-        "Port of Spain":"America/Port_of_Spain","Prague":"Europe/Prague",
-        "Praia":"Atlantic/Cape_Verde","Pretoria":"Africa/Johannesburg",
-        "Pyongyang":"Asia/Pyongyang","Quito":"America/Guayaquil",
-        "Rabat":"Africa/Casablanca","Ramallah":"Asia/Hebron","Reykjavik":"Atlantic/Reykjavik",
-        "Riga":"Europe/Riga","Riyadh":"Asia/Riyadh","Rome":"Europe/Rome",
-        "Roseau":"America/Dominica","San José":"America/Costa_Rica","San Marino":"Europe/Rome",
-        "San Salvador":"America/El_Salvador","Sana'a":"Asia/Aden",
-        "Santiago":"America/Santiago","Santo Domingo":"America/Santo_Domingo",
-        "São Tomé":"Africa/Sao_Tome","Sarajevo":"Europe/Sarajevo","Seoul":"Asia/Seoul",
-        "Singapore":"Asia/Singapore","Skopje":"Europe/Skopje","Sofia":"Europe/Sofia",
-        "Stockholm":"Europe/Stockholm","Suva":"Pacific/Fiji","Taipei":"Asia/Taipei",
-        "Tallinn":"Europe/Tallinn","Tarawa":"Pacific/Tarawa","Tashkent":"Asia/Tashkent",
-        "Tbilisi":"Asia/Tbilisi","Tegucigalpa":"America/Tegucigalpa","Tehran":"Asia/Tehran",
-        "Thimphu":"Asia/Thimphu","Tirana":"Europe/Tirana","Tokyo":"Asia/Tokyo",
-        "Tripoli":"Africa/Tripoli","Tunis":"Africa/Tunis","Ulaanbaatar":"Asia/Ulaanbaatar",
-        "Vaduz":"Europe/Vaduz","Valletta":"Europe/Malta","Victoria":"Indian/Mahe",
-        "Vienna":"Europe/Vienna","Vientiane":"Asia/Vientiane","Vilnius":"Europe/Vilnius",
-        "Warsaw":"Europe/Warsaw","Washington D.C.":"America/New_York",
-        "Wellington":"Pacific/Auckland","Windhoek":"Africa/Windhoek",
-        "Yaoundé":"Africa/Douala","Yerevan":"Asia/Yerevan","Zagreb":"Europe/Zagreb"
-    })
-
-    readonly property var presetCities: [
-        { name: "Abu Dhabi",     lat: 24.4539,  lon:  54.3773 },
-        { name: "Abuja",         lat:  9.0579,  lon:   7.4951 },
-        { name: "Accra",         lat:  5.6037,  lon:  -0.1870 },
-        { name: "Addis Ababa",   lat:  9.0250,  lon:  38.7469 },
-        { name: "Algiers",       lat: 36.7538,  lon:   3.0588 },
-        { name: "Amman",         lat: 31.9454,  lon:  35.9284 },
-        { name: "Amsterdam",     lat: 52.3676,  lon:   4.9041 },
-        { name: "Ankara",        lat: 39.9334,  lon:  32.8597 },
-        { name: "Antananarivo",  lat:-18.8792,  lon:  47.5079 },
-        { name: "Apia",          lat:-13.8333,  lon:-171.7500 },
-        { name: "Ashgabat",      lat: 37.9601,  lon:  58.3261 },
-        { name: "Asmara",        lat: 15.3389,  lon:  38.9318 },
-        { name: "Astana",        lat: 51.1694,  lon:  71.4491 },
-        { name: "Athens",        lat: 37.9838,  lon:  23.7275 },
-        { name: "Baghdad",       lat: 33.3128,  lon:  44.3615 },
-        { name: "Baku",          lat: 40.4093,  lon:  49.8671 },
-        { name: "Bamako",        lat: 12.6392,  lon:  -8.0029 },
-        { name: "Bandar Seri Begawan", lat: 4.9031, lon: 114.9398 },
-        { name: "Bangkok",       lat: 13.7563,  lon: 100.5018 },
-        { name: "Bangui",        lat:  4.3947,  lon:  18.5582 },
-        { name: "Banjul",        lat: 13.4549,  lon: -16.5790 },
-        { name: "Basseterre",    lat: 17.3026,  lon: -62.7177 },
-        { name: "Beijing",       lat: 39.9042,  lon: 116.4074 },
-        { name: "Beirut",        lat: 33.8938,  lon:  35.5018 },
-        { name: "Belgrade",      lat: 44.7866,  lon:  20.4489 },
-        { name: "Belmopan",      lat: 17.2510,  lon: -88.7590 },
-        { name: "Berlin",        lat: 52.5200,  lon:  13.4050 },
-        { name: "Bern",          lat: 46.9480,  lon:   7.4474 },
-        { name: "Bishkek",       lat: 42.8746,  lon:  74.5698 },
-        { name: "Bissau",        lat: 11.8639,  lon: -15.5984 },
-        { name: "Bogotá",        lat:  4.7110,  lon: -74.0721 },
-        { name: "Brasília",      lat:-15.7975,  lon: -47.8919 },
-        { name: "Bratislava",    lat: 48.1486,  lon:  17.1077 },
-        { name: "Brazzaville",   lat: -4.2634,  lon:  15.2429 },
-        { name: "Bridgetown",    lat: 13.0969,  lon: -59.6145 },
-        { name: "Brussels",      lat: 50.8503,  lon:   4.3517 },
-        { name: "Bucharest",     lat: 44.4268,  lon:  26.1025 },
-        { name: "Budapest",      lat: 47.4979,  lon:  19.0402 },
-        { name: "Buenos Aires",  lat:-34.6037,  lon: -58.3816 },
-        { name: "Cairo",         lat: 30.0444,  lon:  31.2357 },
-        { name: "Canberra",      lat:-35.2809,  lon: 149.1300 },
-        { name: "Caracas",       lat: 10.4806,  lon: -66.9036 },
-        { name: "Castries",      lat: 14.0101,  lon: -61.0010 },
-        { name: "Copenhagen",    lat: 55.6761,  lon:  12.5683 },
-        { name: "Conakry",       lat:  9.6412,  lon: -13.5784 },
-        { name: "Dakar",         lat: 14.7167,  lon: -17.4677 },
-        { name: "Damascus",      lat: 33.5138,  lon:  36.2765 },
-        { name: "Dhaka",         lat: 23.8103,  lon:  90.4125 },
-        { name: "Dili",          lat: -8.5569,  lon: 125.5603 },
-        { name: "Djibouti",      lat: 11.5721,  lon:  43.1456 },
-        { name: "Dodoma",        lat: -6.1630,  lon:  35.7516 },
-        { name: "Doha",          lat: 25.2854,  lon:  51.5310 },
-        { name: "Dublin",        lat: 53.3498,  lon:  -6.2603 },
-        { name: "Dushanbe",      lat: 38.5598,  lon:  68.7740 },
-        { name: "Edinburgh",     lat: 55.9533,  lon:  -3.1883 },
-        { name: "Freetown",      lat:  8.4657,  lon: -13.2317 },
-        { name: "Funafuti",      lat: -8.5201,  lon: 179.1940 },
-        { name: "Gaborone",      lat:-24.6282,  lon:  25.9231 },
-        { name: "Gaza City",     lat: 31.5017,  lon:  34.4668 },
-        { name: "George Town",   lat: 19.2866,  lon: -81.3744 },
-        { name: "Georgetown",    lat:  6.8013,  lon: -58.1553 },
-        { name: "Guatemala City",lat: 14.6349,  lon: -90.5069 },
-        { name: "Hanoi",         lat: 21.0278,  lon: 105.8342 },
-        { name: "Harare",        lat:-17.8252,  lon:  31.0335 },
-        { name: "Havana",        lat: 23.1136,  lon: -82.3666 },
-        { name: "Helsinki",      lat: 60.1699,  lon:  24.9384 },
-        { name: "Honiara",       lat: -9.4280,  lon: 159.9557 },
-        { name: "Islamabad",     lat: 33.6844,  lon:  73.0479 },
-        { name: "Jakarta",       lat: -6.2088,  lon: 106.8456 },
-        { name: "Jerusalem",     lat: 31.7683,  lon:  35.2137 },
-        { name: "Kabul",         lat: 34.5553,  lon:  69.2075 },
-        { name: "Kampala",       lat:  0.3476,  lon:  32.5825 },
-        { name: "Kathmandu",     lat: 27.7172,  lon:  85.3240 },
-        { name: "Khartoum",      lat: 15.5007,  lon:  32.5599 },
-        { name: "Kigali",        lat: -1.9403,  lon:  29.8739 },
-        { name: "Kingston",      lat: 18.0179,  lon: -76.8099 },
-        { name: "Kingstown",     lat: 13.1584,  lon: -61.2248 },
-        { name: "Kinshasa",      lat: -4.4419,  lon:  15.2663 },
-        { name: "Kuala Lumpur",  lat:  3.1390,  lon: 101.6869 },
-        { name: "Kuwait City",   lat: 29.3759,  lon:  47.9774 },
-        { name: "Kyiv",          lat: 50.4501,  lon:  30.5234 },
-        { name: "La Paz",        lat:-16.4897,  lon: -68.1193 },
-        { name: "Libreville",    lat:  0.4162,  lon:   9.4673 },
-        { name: "Lilongwe",      lat:-13.9626,  lon:  33.7741 },
-        { name: "Lima",          lat:-12.0464,  lon: -77.0428 },
-        { name: "Lisbon",        lat: 38.7223,  lon:  -9.1393 },
-        { name: "Ljubljana",     lat: 46.0569,  lon:  14.5058 },
-        { name: "Lomé",          lat:  6.1256,  lon:   1.2254 },
-        { name: "London",        lat: 51.5074,  lon:  -0.1278 },
-        { name: "Luanda",        lat: -8.8390,  lon:  13.2894 },
-        { name: "Lusaka",        lat:-15.3875,  lon:  28.3228 },
-        { name: "Luxembourg",    lat: 49.6116,  lon:   6.1319 },
-        { name: "Madrid",        lat: 40.4168,  lon:  -3.7038 },
-        { name: "Majuro",        lat:  7.0667,  lon: 171.3833 },
-        { name: "Malabo",        lat:  3.7504,  lon:   8.7371 },
-        { name: "Malé",          lat:  4.1755,  lon:  73.5093 },
-        { name: "Managua",       lat: 12.1150,  lon: -86.2362 },
-        { name: "Manama",        lat: 26.2285,  lon:  50.5860 },
-        { name: "Manila",        lat: 14.5995,  lon: 120.9842 },
-        { name: "Maputo",        lat:-25.9692,  lon:  32.5732 },
-        { name: "Maseru",        lat:-29.3167,  lon:  27.4833 },
-        { name: "Mbabane",       lat:-26.3054,  lon:  31.1367 },
-        { name: "Mexico City",   lat: 19.4326,  lon: -99.1332 },
-        { name: "Minsk",         lat: 53.9006,  lon:  27.5590 },
-        { name: "Mogadishu",     lat:  2.0469,  lon:  45.3182 },
-        { name: "Monrovia",      lat:  6.3004,  lon: -10.7969 },
-        { name: "Montevideo",    lat:-34.9011,  lon: -56.1645 },
-        { name: "Moroni",        lat:-11.7172,  lon:  43.2473 },
-        { name: "Moscow",        lat: 55.7558,  lon:  37.6173 },
-        { name: "Muscat",        lat: 23.5880,  lon:  58.3829 },
-        { name: "Nairobi",       lat: -1.2921,  lon:  36.8219 },
-        { name: "Nassau",        lat: 25.0343,  lon: -77.3963 },
-        { name: "Naypyidaw",     lat: 19.7633,  lon:  96.0785 },
-        { name: "New Delhi",     lat: 28.6139,  lon:  77.2090 },
-        { name: "Niamey",        lat: 13.5127,  lon:   2.1128 },
-        { name: "Nicosia",       lat: 35.1856,  lon:  33.3823 },
-        { name: "Nouakchott",    lat: 18.0735,  lon: -15.9582 },
-        { name: "Nuku'alofa",    lat:-21.2087,  lon:-175.1982 },
-        { name: "Nuuk",          lat: 64.1814,  lon: -51.6941 },
-        { name: "Oslo",          lat: 59.9139,  lon:  10.7522 },
-        { name: "Ottawa",        lat: 45.4215,  lon: -75.6972 },
-        { name: "Ouagadougou",   lat: 12.3714,  lon:  -1.5197 },
-        { name: "Palikir",       lat:  6.9248,  lon: 158.1610 },
-        { name: "Panama City",   lat:  8.9824,  lon: -79.5199 },
-        { name: "Paramaribo",    lat:  5.8520,  lon: -55.2038 },
-        { name: "Paris",         lat: 48.8566,  lon:   2.3522 },
-        { name: "Phnom Penh",    lat: 11.5564,  lon: 104.9282 },
-        { name: "Podgorica",     lat: 42.4304,  lon:  19.2594 },
-        { name: "Port-au-Prince",lat: 18.5944,  lon: -72.3074 },
-        { name: "Port Louis",    lat:-20.1609,  lon:  57.5012 },
-        { name: "Port Moresby",  lat: -6.3149,  lon: 147.1500 },
-        { name: "Port Vila",     lat:-17.7334,  lon: 168.3220 },
-        { name: "Port of Spain", lat: 10.6596,  lon: -61.5086 },
-        { name: "Prague",        lat: 50.0755,  lon:  14.4378 },
-        { name: "Praia",         lat: 14.9330,  lon: -23.5133 },
-        { name: "Pretoria",      lat:-25.7479,  lon:  28.2293 },
-        { name: "Pyongyang",     lat: 39.0392,  lon: 125.7625 },
-        { name: "Quito",         lat: -0.1807,  lon: -78.4678 },
-        { name: "Rabat",         lat: 34.0209,  lon:  -6.8416 },
-        { name: "Ramallah",      lat: 31.8996,  lon:  35.2041 },
-        { name: "Reykjavik",     lat: 64.1466,  lon: -21.9426 },
-        { name: "Riga",          lat: 56.9496,  lon:  24.1052 },
-        { name: "Riyadh",        lat: 24.7136,  lon:  46.6753 },
-        { name: "Rome",          lat: 41.9028,  lon:  12.4964 },
-        { name: "Roseau",        lat: 15.3092,  lon: -61.3794 },
-        { name: "San José",      lat:  9.9281,  lon: -84.0907 },
-        { name: "San Marino",    lat: 43.9333,  lon:  12.4500 },
-        { name: "San Salvador",  lat: 13.6929,  lon: -89.2182 },
-        { name: "Sana'a",        lat: 15.3694,  lon:  44.1910 },
-        { name: "Santiago",      lat:-33.4489,  lon: -70.6693 },
-        { name: "Santo Domingo", lat: 18.4861,  lon: -69.9312 },
-        { name: "São Tomé",      lat:  0.3365,  lon:   6.7273 },
-        { name: "Sarajevo",      lat: 43.8563,  lon:  18.4131 },
-        { name: "Seoul",         lat: 37.5665,  lon: 126.9780 },
-        { name: "Singapore",     lat:  1.3521,  lon: 103.8198 },
-        { name: "Skopje",        lat: 41.9981,  lon:  21.4254 },
-        { name: "Sofia",         lat: 42.6977,  lon:  23.3219 },
-        { name: "Stockholm",     lat: 59.3293,  lon:  18.0686 },
-        { name: "Suva",          lat:-18.1416,  lon: 178.4419 },
-        { name: "Taipei",        lat: 25.0330,  lon: 121.5654 },
-        { name: "Tallinn",       lat: 59.4370,  lon:  24.7536 },
-        { name: "Tarawa",        lat:  1.4518,  lon: 172.9717 },
-        { name: "Tashkent",      lat: 41.2995,  lon:  69.2401 },
-        { name: "Tbilisi",       lat: 41.7151,  lon:  44.8271 },
-        { name: "Tegucigalpa",   lat: 14.0723,  lon: -87.1921 },
-        { name: "Tehran",        lat: 35.6892,  lon:  51.3890 },
-        { name: "Thimphu",       lat: 27.4728,  lon:  89.6393 },
-        { name: "Tirana",        lat: 41.3275,  lon:  19.8187 },
-        { name: "Tokyo",         lat: 35.6762,  lon: 139.6503 },
-        { name: "Tripoli",       lat: 32.8872,  lon:  13.1913 },
-        { name: "Tunis",         lat: 36.8065,  lon:  10.1815 },
-        { name: "Ulaanbaatar",   lat: 47.8864,  lon: 106.9057 },
-        { name: "Vaduz",         lat: 47.1660,  lon:   9.5554 },
-        { name: "Valletta",      lat: 35.8989,  lon:  14.5146 },
-        { name: "Victoria",      lat: -4.6796,  lon:  55.4920 },
-        { name: "Vienna",        lat: 48.2082,  lon:  16.3738 },
-        { name: "Vientiane",     lat: 17.9757,  lon: 102.6331 },
-        { name: "Vilnius",       lat: 54.6872,  lon:  25.2797 },
-        { name: "Warsaw",        lat: 52.2297,  lon:  21.0122 },
-        { name: "Washington D.C.",lat: 38.9072,  lon: -77.0369 },
-        { name: "Wellington",    lat:-41.2865,  lon: 174.7762 },
-        { name: "Windhoek",      lat:-22.5609,  lon:  17.0658 },
-        { name: "Yaoundé",       lat:  3.8480,  lon:  11.5021 },
-        { name: "Yerevan",       lat: 40.1792,  lon:  44.4991 },
-        { name: "Zagreb",        lat: 45.8150,  lon:  15.9819 }
-    ]
+    readonly property var presetCities: Cities.presetCities
 
     // Filtered list
     property var _filteredCities: presetCities
@@ -273,30 +19,12 @@ Page {
 
     function _filterCities(query) {
         _searchText = query;
-        if (!query || query.length === 0) {
-            _filteredCities = presetCities;
-            return;
-        }
-        var q = query.toLowerCase();
-        var result = [];
-        for (var i = 0; i < presetCities.length; i++) {
-            if (presetCities[i].name.toLowerCase().indexOf(q) >= 0) {
-                result.push(presetCities[i]);
-            }
-        }
-        _filteredCities = result;
+        _filteredCities = Cities.filterCities(query);
     }
 
     SilicaFlickable {
         anchors.fill: parent
         contentHeight: column.height
-
-        PullDownMenu {
-            MenuItem {
-                text: qsTr("Custom Location")
-                onClicked: customSection.visible = !customSection.visible
-            }
-        }
 
         Column {
             id: column
@@ -311,10 +39,120 @@ Page {
                 id: searchField
                 width: parent.width
                 placeholderText: qsTr("Search cities")
-                onTextChanged: _filterCities(text)
+                onTextChanged: {
+                    _filterCities(text);
+                    if (!_nameManuallyEdited)
+                        nameField.text = text;
+                }
 
                 EnterKey.iconSource: "image://theme/icon-m-enter-close"
                 EnterKey.onClicked: focus = false
+            }
+
+            // Custom location section
+            SectionHeader {
+                text: qsTr("Custom Location")
+            }
+
+            Column {
+                width: parent.width
+                spacing: Theme.paddingSmall
+
+                TextField {
+                    id: nameField
+                    width: parent.width
+                    placeholderText: qsTr("Location name")
+                    label: qsTr("Name")
+                    onTextChanged: {
+                        if (activeFocus) _nameManuallyEdited = true;
+                    }
+                    EnterKey.iconSource: "image://theme/icon-m-enter-next"
+                    EnterKey.onClicked: latField.focus = true
+                }
+
+                Row {
+                    width: parent.width
+                    spacing: Theme.paddingSmall
+
+                    TextField {
+                        id: latField
+                        width: parent.width * 0.5 - Theme.paddingSmall
+                        placeholderText: qsTr("Lat")
+                        label: qsTr("Latitude")
+                        inputMethodHints: Qt.ImhFormattedNumbersOnly
+                        EnterKey.iconSource: "image://theme/icon-m-enter-next"
+                        EnterKey.onClicked: lonField.focus = true
+                    }
+
+                    TextField {
+                        id: lonField
+                        width: parent.width * 0.5 - Theme.paddingSmall
+                        placeholderText: qsTr("Lon")
+                        label: qsTr("Longitude")
+                        inputMethodHints: Qt.ImhFormattedNumbersOnly
+                        EnterKey.iconSource: "image://theme/icon-m-enter-accept"
+                        EnterKey.onClicked: addCustomBtn.clicked()
+                    }
+                }
+
+                Row {
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    spacing: Theme.paddingMedium
+
+                    IconButton {
+                        id: gpsBtn
+                        icon.source: "image://theme/icon-m-whereami"
+                        enabled: !gpsSource.active
+                        onClicked: gpsSource.active = true
+                    }
+
+                    Button {
+                        id: addCustomBtn
+                        text: qsTr("Add")
+                        enabled: nameField.text.length > 0
+                                 && !isNaN(parseFloat(latField.text))
+                                 && !isNaN(parseFloat(lonField.text))
+
+                        onClicked: {
+                            var lat = parseFloat(latField.text);
+                            var lon = parseFloat(lonField.text);
+                            if (lat < -90 || lat > 90 || lon < -180 || lon > 180) {
+                                latField.errorHighlight = (lat < -90 || lat > 90);
+                                lonField.errorHighlight = (lon < -180 || lon > 180);
+                                return;
+                            }
+                            latField.errorHighlight = false;
+                            lonField.errorHighlight = false;
+                            pickerPage.locationSelected({
+                                name: nameField.text,
+                                lat: lat,
+                                lon: lon
+                            });
+                            pageStack.pop();
+                        }
+                    }
+                }
+
+                Label {
+                    visible: gpsSource.active
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    text: qsTr("Locating...")
+                    color: Theme.highlightColor
+                    font.pixelSize: Theme.fontSizeSmall
+                }
+
+                PositionSource {
+                    id: gpsSource
+                    active: false
+                    updateInterval: 1000
+                    onPositionChanged: {
+                        if (position.latitudeValid && position.longitudeValid) {
+                            latField.text = position.coordinate.latitude.toFixed(4);
+                            lonField.text = position.coordinate.longitude.toFixed(4);
+                            active = false;
+                        }
+                    }
+                }
             }
 
             // Preset cities list
@@ -346,77 +184,9 @@ Page {
                             name: modelData.name,
                             lat: modelData.lat,
                             lon: modelData.lon,
-                            tz: cityTz[modelData.name] || ""
+                            tz: Cities.getTimezone(modelData.name)
                         });
                         pageStack.pop();
-                    }
-                }
-            }
-
-            // Custom location section
-            Item {
-                id: customSection
-                width: parent.width
-                height: visible ? customColumn.height : 0
-                visible: false
-
-                Column {
-                    id: customColumn
-                    width: parent.width
-                    spacing: Theme.paddingMedium
-
-                    SectionHeader {
-                        text: qsTr("Custom Location")
-                    }
-
-                    TextField {
-                        id: nameField
-                        width: parent.width
-                        placeholderText: qsTr("Location name")
-                        label: qsTr("Name")
-                        EnterKey.iconSource: "image://theme/icon-m-enter-next"
-                        EnterKey.onClicked: latField.focus = true
-                    }
-
-                    TextField {
-                        id: latField
-                        width: parent.width
-                        placeholderText: qsTr("Latitude (-90 to 90)")
-                        label: qsTr("Latitude")
-                        inputMethodHints: Qt.ImhFormattedNumbersOnly
-                        EnterKey.iconSource: "image://theme/icon-m-enter-next"
-                        EnterKey.onClicked: lonField.focus = true
-                    }
-
-                    TextField {
-                        id: lonField
-                        width: parent.width
-                        placeholderText: qsTr("Longitude (-180 to 180)")
-                        label: qsTr("Longitude")
-                        inputMethodHints: Qt.ImhFormattedNumbersOnly
-                        EnterKey.iconSource: "image://theme/icon-m-enter-accept"
-                        EnterKey.onClicked: addCustomBtn.clicked()
-                    }
-
-                    Button {
-                        id: addCustomBtn
-                        anchors.horizontalCenter: parent.horizontalCenter
-                        text: qsTr("Add")
-                        enabled: nameField.text.length > 0
-                                 && !isNaN(parseFloat(latField.text))
-                                 && !isNaN(parseFloat(lonField.text))
-
-                        onClicked: {
-                            var lat = parseFloat(latField.text);
-                            var lon = parseFloat(lonField.text);
-                            if (lat < -90 || lat > 90 || lon < -180 || lon > 180) return;
-                            pickerPage.locationSelected({
-                                name: nameField.text,
-                                lat: lat,
-                                lon: lon
-                            });
-                            pageStack.pop();
-                        }
                     }
                 }
             }

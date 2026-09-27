@@ -7,6 +7,8 @@ ApplicationWindow {
     id: app
     _defaultPageOrientations: Orientation.All
 
-    initialPage: Component { MainPage {} }
+    initialPage: Component {
+        MainPage {}
+    }
     cover: Component { CoverPage {} }
 }

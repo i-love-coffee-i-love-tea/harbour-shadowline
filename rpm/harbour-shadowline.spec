@@ -1,6 +1,6 @@
 Name:       harbour-shadowline
 Summary:    Shadow Line — interactive daylight globe for Sailfish OS
-Version:    1.0.0
+Version:    1.0.8
 Release:    1
 Group:      Utility
 License:    MIT
@@ -11,6 +11,7 @@ BuildRequires:  pkgconfig(sailfishapp) >= 1.0.2
 BuildRequires:  pkgconfig(Qt5Core)
 BuildRequires:  pkgconfig(Qt5Qml)
 BuildRequires:  pkgconfig(Qt5Quick)
+BuildRequires:  pkgconfig(Qt5Positioning)
 BuildRequires:  gcc-c++
 
 %description

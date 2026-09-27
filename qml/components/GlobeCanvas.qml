@@ -4,12 +4,13 @@ import "../js/projection.js" as Proj
 import "../js/coastlines.js" as Coast
 import "../js/borders.js" as Borders
 import "../js/solar.js" as Solar
+import "../js/constants.js" as Const
 
 Item {
     id: globe
 
-    property real centerLatitude: 25.0
-    property real centerLongitude: 30.0
+    property real centerLatitude: Const.DEFAULT_CENTER_LAT
+    property real centerLongitude: Const.DEFAULT_CENTER_LON
     property var locations: []
 
     property real selectedLat: NaN
@@ -69,7 +70,7 @@ Item {
         spinAnim.start();
     }
 
-    property real _radius: Math.min(canvas.width, canvas.height) / 2 - 4
+    property real _radius: Math.min(canvas.width, canvas.height) / 2 - Const.GLOBE_MARGIN
     property real _cx: canvas.width / 2
     property real _cy: canvas.height / 2
 
@@ -84,68 +85,63 @@ Item {
         property real _selLon: globe.selectedLon
         property int _tick: 0
 
-        onPaint: {
-            var ctx = getContext("2d");
-            ctx.reset();
-            ctx.clearRect(0, 0, width, height);
+        // --- Rendering helpers ---
 
-            var R = globe._radius;
-            var cx = globe._cx;
-            var cy = globe._cy;
-            var cLat = globe.centerLatitude;
-            var cLon = globe.centerLongitude;
-            var cLatR = cLat * Proj.DEG;
-            var cLonR = cLon * Proj.DEG;
-
-            // --- 1. Ocean ---
+        function _drawOcean(ctx, cx, cy, R) {
             ctx.beginPath();
             ctx.arc(cx, cy, R, 0, Math.PI * 2);
             ctx.fillStyle = Qt.darker(Theme.highlightBackgroundColor, 3);
             ctx.fill();
+        }
 
-            ctx.save();
-            ctx.beginPath();
-            ctx.arc(cx, cy, R, 0, Math.PI * 2);
-            ctx.clip();
+        function _inverseProject(px, py, cx, cy, R, cLatR, cLonR) {
+            var dx = px - cx;
+            var dy = py - cy;
+            if (dx * dx + dy * dy > R * R) return null;
+            var xn = dx / R;
+            var yn = -dy / R;
+            var rho = Math.sqrt(xn * xn + yn * yn);
+            if (rho > 1) return null;
+            var c = rho < 1e-10 ? 0 : Math.asin(rho);
+            var cosC = Math.cos(c);
+            var sinC = Math.sin(c);
+            var lat, lon;
+            if (rho < 1e-10) {
+                lat = cLatR / Const.DEG;
+                lon = cLonR / Const.DEG;
+            } else {
+                lat = Math.asin(cosC * Math.sin(cLatR) + yn * sinC * Math.cos(cLatR) / rho) / Const.DEG;
+                lon = (cLonR + Math.atan2(xn * sinC, rho * Math.cos(cLatR) * cosC - yn * sinC * Math.sin(cLatR))) / Const.DEG;
+            }
+            return { lat: lat, lon: lon };
+        }
 
-            // --- 2. Night side (scanline, step=6) ---
+        function _drawNightSide(ctx, cx, cy, R, cLat, cLon) {
+            var cLatR = cLat * Const.DEG;
+            var cLonR = cLon * Const.DEG;
             var now = new Date();
             var ss = Solar.subsolarPoint(now);
-            var ssLatR = ss.lat * Proj.DEG;
-            var ssLonR = ss.lon * Proj.DEG;
-            var step = 6;
-            ctx.fillStyle = Qt.rgba(0, 0, 0, 0.45);
+            var ssLatR = ss.lat * Const.DEG;
+            var ssLonR = ss.lon * Const.DEG;
+            var step = Const.NIGHT_SCANLINE_STEP;
+            ctx.fillStyle = Qt.rgba(0, 0, 0, Const.NIGHT_OPACITY);
 
             for (var py = Math.floor(cy - R); py <= Math.ceil(cy + R); py += step) {
                 for (var px = Math.floor(cx - R); px <= Math.ceil(cx + R); px += step) {
-                    var dx = px - cx;
-                    var dy = py - cy;
-                    if (dx * dx + dy * dy > R * R) continue;
-                    var xn = dx / R;
-                    var yn = -dy / R;
-                    var rho = Math.sqrt(xn * xn + yn * yn);
-                    if (rho > 1) continue;
-                    var c = rho < 1e-10 ? 0 : Math.asin(rho);
-                    var cosC = Math.cos(c);
-                    var sinC = Math.sin(c);
-                    var lat, lon;
-                    if (rho < 1e-10) {
-                        lat = cLat; lon = cLon;
-                    } else {
-                        lat = Math.asin(cosC * Math.sin(cLatR) + yn * sinC * Math.cos(cLatR) / rho) / Proj.DEG;
-                        lon = (cLonR + Math.atan2(xn * sinC, rho * Math.cos(cLatR) * cosC - yn * sinC * Math.sin(cLatR))) / Proj.DEG;
-                    }
-                    var cosA = Math.sin(ssLatR) * Math.sin(lat * Proj.DEG)
-                             + Math.cos(ssLatR) * Math.cos(lat * Proj.DEG) * Math.cos(lon * Proj.DEG - ssLonR);
+                    var pos = _inverseProject(px, py, cx, cy, R, cLatR, cLonR);
+                    if (!pos) continue;
+                    var cosA = Math.sin(ssLatR) * Math.sin(pos.lat * Const.DEG)
+                             + Math.cos(ssLatR) * Math.cos(pos.lat * Const.DEG)
+                             * Math.cos(pos.lon * Const.DEG - ssLonR);
                     if (cosA < 0) ctx.fillRect(px, py, step, step);
                 }
             }
+        }
 
-            // --- 3. Coastlines ---
-            ctx.strokeStyle = Theme.highlightColor;
-            ctx.lineWidth = 1.2;
-            ctx.lineJoin = "round";
-            var segments = Coast.segments;
+        function _drawSegments(ctx, segments, cLat, cLon, R, cx, cy, lineWidth, strokeStyle) {
+            ctx.strokeStyle = strokeStyle;
+            ctx.lineWidth = lineWidth;
+            ctx.lineJoin = Const.COASTLINE_LINE_JOIN;
             for (var s = 0; s < segments.length; s++) {
                 var seg = segments[s];
                 var started = false;
@@ -161,143 +157,158 @@ Item {
                 }
                 if (started) ctx.stroke();
             }
+        }
 
-            // --- 3b. Borders ---
-            ctx.strokeStyle = Qt.rgba(Theme.secondaryHighlightColor.r, Theme.secondaryHighlightColor.g, Theme.secondaryHighlightColor.b, 0.35);
-            ctx.lineWidth = 0.7;
-            ctx.lineJoin = "round";
-            var borderSegs = Borders.segments;
-            for (var bs = 0; bs < borderSegs.length; bs++) {
-                var bseg = borderSegs[bs];
-                var bstarted = false;
-                ctx.beginPath();
-                for (var bi = 0; bi < bseg.length; bi++) {
-                    var bp = Proj.project(bseg[bi][1], bseg[bi][0], cLat, cLon, R, cx, cy);
-                    if (bp) {
-                        if (!bstarted) { ctx.moveTo(bp.x, bp.y); bstarted = true; }
-                        else ctx.lineTo(bp.x, bp.y);
-                    } else {
-                        if (bstarted) { ctx.stroke(); ctx.beginPath(); bstarted = false; }
-                    }
-                }
-                if (bstarted) ctx.stroke();
-            }
+        function _drawSun(ctx, sunP) {
+            if (!sunP) return;
+            ctx.beginPath();
+            ctx.arc(sunP.x, sunP.y, Const.SUN_OUTER_RADIUS, 0, Math.PI * 2);
+            ctx.fillStyle = Qt.rgba(Theme.highlightColor.r, Theme.highlightColor.g, Theme.highlightColor.b, Const.SUN_OUTER_ALPHA);
+            ctx.fill();
+            ctx.beginPath();
+            ctx.arc(sunP.x, sunP.y, Const.SUN_INNER_RADIUS, 0, Math.PI * 2);
+            ctx.fillStyle = Qt.lighter(Theme.highlightColor, 1.5);
+            ctx.fill();
+        }
 
-            // --- 4. Sun ---
-            var sunP = Proj.project(ss.lat, ss.lon, cLat, cLon, R, cx, cy);
-            if (sunP) {
-                ctx.beginPath();
-                ctx.arc(sunP.x, sunP.y, 9, 0, Math.PI * 2);
-                ctx.fillStyle = Qt.rgba(Theme.highlightColor.r, Theme.highlightColor.g, Theme.highlightColor.b, 0.3);
-                ctx.fill();
-                ctx.beginPath();
-                ctx.arc(sunP.x, sunP.y, 5, 0, Math.PI * 2);
-                ctx.fillStyle = Qt.lighter(Theme.highlightColor, 1.5);
-                ctx.fill();
-            }
-
-            // --- 5. Location markers ---
-            var locs = globe.locations;
+        function _drawLocationMarkers(ctx, locs, cLat, cLon, R, cx, cy) {
             for (var li = 0; li < locs.length; li++) {
-                var loc = locs[li];
-                var lp = Proj.project(loc.lat, loc.lon, cLat, cLon, R, cx, cy);
-                if (lp) {
-                    // Outer glow
-                    ctx.beginPath();
-                    ctx.arc(lp.x, lp.y, 12, 0, Math.PI * 2);
-                    ctx.fillStyle = "rgba(255, 255, 255, 0.15)";
-                    ctx.fill();
-
-                    // Inner glow
-                    ctx.beginPath();
-                    ctx.arc(lp.x, lp.y, 8, 0, Math.PI * 2);
-                    ctx.fillStyle = "rgba(255, 255, 255, 0.25)";
-                    ctx.fill();
-
-                    // Shadow
-                    ctx.beginPath();
-                    ctx.arc(lp.x + 1, lp.y + 1, 5, 0, Math.PI * 2);
-                    ctx.fillStyle = "rgba(0, 0, 0, 0.4)";
-                    ctx.fill();
-
-                    // Main dot
-                    ctx.beginPath();
-                    ctx.arc(lp.x, lp.y, 5, 0, Math.PI * 2);
-                    ctx.fillStyle = Theme.highlightColor;
-                    ctx.fill();
-
-                    // White ring
-                    ctx.lineWidth = 1.2;
-                    ctx.strokeStyle = "rgba(255, 255, 255, 0.8)";
-                    ctx.stroke();
-
-                    // Specular dot
-                    ctx.beginPath();
-                    ctx.arc(lp.x - 1.5, lp.y - 1.5, 1.8, 0, Math.PI * 2);
-                    ctx.fillStyle = "rgba(255, 255, 255, 0.9)";
-                    ctx.fill();
-                }
+                var lp = Proj.project(locs[li].lat, locs[li].lon, cLat, cLon, R, cx, cy);
+                if (!lp) continue;
+                // Outer glow
+                ctx.beginPath();
+                ctx.arc(lp.x, lp.y, Const.LOC_OUTER_GLOW_RADIUS, 0, Math.PI * 2);
+                ctx.fillStyle = "rgba(255, 255, 255, " + Const.LOC_OUTER_GLOW_ALPHA + ")";
+                ctx.fill();
+                // Inner glow
+                ctx.beginPath();
+                ctx.arc(lp.x, lp.y, Const.LOC_INNER_GLOW_RADIUS, 0, Math.PI * 2);
+                ctx.fillStyle = "rgba(255, 255, 255, " + Const.LOC_INNER_GLOW_ALPHA + ")";
+                ctx.fill();
+                // Shadow
+                ctx.beginPath();
+                ctx.arc(lp.x + Const.LOC_SHADOW_OFFSET, lp.y + Const.LOC_SHADOW_OFFSET,
+                        Const.LOC_SHADOW_RADIUS, 0, Math.PI * 2);
+                ctx.fillStyle = "rgba(0, 0, 0, " + Const.LOC_SHADOW_ALPHA + ")";
+                ctx.fill();
+                // Main dot
+                ctx.beginPath();
+                ctx.arc(lp.x, lp.y, Const.LOC_DOT_RADIUS, 0, Math.PI * 2);
+                ctx.fillStyle = Theme.highlightColor;
+                ctx.fill();
+                // White ring
+                ctx.lineWidth = Const.LOC_RING_LINE_WIDTH;
+                ctx.strokeStyle = "rgba(255, 255, 255, " + Const.LOC_RING_ALPHA + ")";
+                ctx.stroke();
+                // Specular
+                ctx.beginPath();
+                ctx.arc(lp.x - Const.LOC_SPECULAR_OFFSET, lp.y - Const.LOC_SPECULAR_OFFSET,
+                        Const.LOC_SPECULAR_RADIUS, 0, Math.PI * 2);
+                ctx.fillStyle = "rgba(255, 255, 255, " + Const.LOC_SPECULAR_ALPHA + ")";
+                ctx.fill();
             }
+        }
 
-            // --- 6. Selected pin ---
-            if (globe.hasSelection) {
-                var sp = Proj.project(globe.selectedLat, globe.selectedLon, cLat, cLon, R, cx, cy);
-                if (sp) {
-                    var rdx = sp.x - cx;
-                    var rdy = sp.y - cy;
-                    var rdLen = Math.sqrt(rdx * rdx + rdy * rdy);
-                    if (rdLen < 1e-6) { rdx = 0; rdy = -1; rdLen = 1; }
-                    var rnx = rdx / rdLen;
-                    var rny = rdy / rdLen;
-                    var pinLen = R * 0.25;
-                    var tipX = sp.x + rnx * pinLen;
-                    var tipY = sp.y + rny * pinLen;
+        function _drawSelectedPin(ctx, cLat, cLon, R, cx, cy) {
+            if (!globe.hasSelection) return;
+            var sp = Proj.project(globe.selectedLat, globe.selectedLon, cLat, cLon, R, cx, cy);
+            if (!sp) return;
+            var rdx = sp.x - cx;
+            var rdy = sp.y - cy;
+            var rdLen = Math.sqrt(rdx * rdx + rdy * rdy);
+            if (rdLen < 1e-6) { rdx = 0; rdy = -1; rdLen = 1; }
+            var rnx = rdx / rdLen;
+            var rny = rdy / rdLen;
+            var pinLen = R * Const.PIN_LENGTH_RATIO;
+            var tipX = sp.x + rnx * pinLen;
+            var tipY = sp.y + rny * pinLen;
 
-                    ctx.beginPath();
-                    ctx.moveTo(sp.x + 1, sp.y + 1);
-                    ctx.lineTo(tipX + 1, tipY + 1);
-                    ctx.strokeStyle = Qt.rgba(0, 0, 0, 0.3);
-                    ctx.lineWidth = 2.5;
-                    ctx.stroke();
+            // Shadow
+            ctx.beginPath();
+            ctx.moveTo(sp.x + Const.PIN_SHADOW_OFFSET, sp.y + Const.PIN_SHADOW_OFFSET);
+            ctx.lineTo(tipX + Const.PIN_SHADOW_OFFSET, tipY + Const.PIN_SHADOW_OFFSET);
+            ctx.strokeStyle = Qt.rgba(0, 0, 0, Const.PIN_SHADOW_ALPHA);
+            ctx.lineWidth = Const.PIN_SHADOW_LINE_WIDTH;
+            ctx.stroke();
 
-                    var grad = ctx.createLinearGradient(sp.x, sp.y, tipX, tipY);
-                    var hc = Theme.highlightColor;
-                    grad.addColorStop(0, Qt.rgba(hc.r, hc.g, hc.b, 0.9));
-                    grad.addColorStop(1, Qt.rgba(hc.r, hc.g, hc.b, 0.2));
-                    ctx.beginPath();
-                    ctx.moveTo(sp.x, sp.y);
-                    ctx.lineTo(tipX, tipY);
-                    ctx.strokeStyle = grad;
-                    ctx.lineWidth = 2;
-                    ctx.stroke();
+            // Gradient pin
+            var grad = ctx.createLinearGradient(sp.x, sp.y, tipX, tipY);
+            var hc = Theme.highlightColor;
+            grad.addColorStop(0, Qt.rgba(hc.r, hc.g, hc.b, 0.9));
+            grad.addColorStop(1, Qt.rgba(hc.r, hc.g, hc.b, 0.2));
+            ctx.beginPath();
+            ctx.moveTo(sp.x, sp.y);
+            ctx.lineTo(tipX, tipY);
+            ctx.strokeStyle = grad;
+            ctx.lineWidth = Const.PIN_LINE_WIDTH;
+            ctx.stroke();
 
-                    ctx.beginPath();
-                    ctx.arc(tipX, tipY, 5, 0, Math.PI * 2);
-                    ctx.fillStyle = Theme.highlightColor;
-                    ctx.fill();
-                    ctx.beginPath();
-                    ctx.arc(tipX - 1.5, tipY - 1.5, 2, 0, Math.PI * 2);
-                    ctx.fillStyle = Qt.rgba(1, 1, 1, 0.4);
-                    ctx.fill();
+            // Tip dot
+            ctx.beginPath();
+            ctx.arc(tipX, tipY, Const.PIN_TIP_RADIUS, 0, Math.PI * 2);
+            ctx.fillStyle = Theme.highlightColor;
+            ctx.fill();
+            ctx.beginPath();
+            ctx.arc(tipX - Const.PIN_TIP_SPECULAR_OFFSET, tipY - Const.PIN_TIP_SPECULAR_OFFSET,
+                    Const.PIN_TIP_SPECULAR_RADIUS, 0, Math.PI * 2);
+            ctx.fillStyle = Qt.rgba(1, 1, 1, Const.PIN_TIP_SPECULAR_ALPHA);
+            ctx.fill();
 
-                    ctx.beginPath();
-                    ctx.arc(sp.x, sp.y, 4, 0, Math.PI * 2);
-                    ctx.fillStyle = Theme.highlightColor;
-                    ctx.fill();
-                }
-            }
+            // Anchor dot
+            ctx.beginPath();
+            ctx.arc(sp.x, sp.y, Const.PIN_ANCHOR_RADIUS, 0, Math.PI * 2);
+            ctx.fillStyle = Theme.highlightColor;
+            ctx.fill();
+        }
 
-            // --- 7. Globe ring ---
-            ctx.restore();
+        function _drawGlobeRing(ctx, cx, cy, R) {
             ctx.beginPath();
             ctx.arc(cx, cy, R, 0, Math.PI * 2);
-            ctx.strokeStyle = Qt.rgba(Theme.highlightColor.r, Theme.highlightColor.g, Theme.highlightColor.b, 0.4);
-            ctx.lineWidth = 1.5;
+            ctx.strokeStyle = Qt.rgba(Theme.highlightColor.r, Theme.highlightColor.g,
+                                      Theme.highlightColor.b, Const.GLOBE_RING_ALPHA);
+            ctx.lineWidth = Const.GLOBE_RING_LINE_WIDTH;
             ctx.stroke();
         }
 
+        onPaint: {
+            var ctx = getContext("2d");
+            ctx.reset();
+            ctx.clearRect(0, 0, width, height);
+
+            var R = globe._radius;
+            var cx = globe._cx;
+            var cy = globe._cy;
+            var cLat = globe.centerLatitude;
+            var cLon = globe.centerLongitude;
+
+            _drawOcean(ctx, cx, cy, R);
+
+            ctx.save();
+            ctx.beginPath();
+            ctx.arc(cx, cy, R, 0, Math.PI * 2);
+            ctx.clip();
+
+            _drawNightSide(ctx, cx, cy, R, cLat, cLon);
+            _drawSegments(ctx, Coast.segments, cLat, cLon, R, cx, cy,
+                          Const.COASTLINE_LINE_WIDTH, Theme.highlightColor);
+            _drawSegments(ctx, Borders.segments, cLat, cLon, R, cx, cy,
+                          Const.BORDER_LINE_WIDTH,
+                          Qt.rgba(Theme.secondaryHighlightColor.r,
+                                  Theme.secondaryHighlightColor.g,
+                                  Theme.secondaryHighlightColor.b,
+                                  Const.BORDER_ALPHA));
+
+            var ss = Solar.subsolarPoint(new Date());
+            _drawSun(ctx, Proj.project(ss.lat, ss.lon, cLat, cLon, R, cx, cy));
+            _drawLocationMarkers(ctx, globe.locations, cLat, cLon, R, cx, cy);
+            _drawSelectedPin(ctx, cLat, cLon, R, cx, cy);
+
+            ctx.restore();
+            _drawGlobeRing(ctx, cx, cy, R);
+        }
+
         Timer {
-            interval: 60000
+            interval: Const.AUTO_REFRESH_INTERVAL
             running: true
             repeat: true
             onTriggered: canvas._tick++
@@ -335,8 +346,8 @@ Item {
             if (!_dragging) return;
             var dx = mouse.x - _lastX;
             var dy = mouse.y - _lastY;
-            globe.centerLongitude -= dx * 0.3;
-            globe.centerLatitude += dy * 0.3;
+            globe.centerLongitude -= dx * Const.DRAG_SENSITIVITY;
+            globe.centerLatitude += dy * Const.DRAG_SENSITIVITY;
             if (globe.centerLatitude > 90) globe.centerLatitude = 90;
             if (globe.centerLatitude < -90) globe.centerLatitude = -90;
             while (globe.centerLongitude > 180) globe.centerLongitude -= 360;
