@@ -10,7 +10,6 @@ Page {
     property var db: null
     property var locationList: []
     property int _refreshTick: 0
-    property int _expandedIndex: -1
 
     // --- Database ---
     function openDb() {
@@ -25,6 +24,8 @@ Page {
                 + "sort_order INTEGER DEFAULT 0)");
             tx.executeSql("CREATE TABLE IF NOT EXISTS settings("
                 + "key TEXT PRIMARY KEY, value TEXT)");
+            // Migrate: add tz column if missing
+            try { tx.executeSql("ALTER TABLE locations ADD COLUMN tz TEXT DEFAULT ''"); } catch(e) {}
         });
         return db;
     }
@@ -33,13 +34,14 @@ Page {
         openDb();
         var result = [];
         db.readTransaction(function(tx) {
-            var rs = tx.executeSql("SELECT id, name, lat, lon FROM locations ORDER BY sort_order, id");
+            var rs = tx.executeSql("SELECT id, name, lat, lon, tz FROM locations ORDER BY sort_order, id");
             for (var i = 0; i < rs.rows.length; i++) {
                 result.push({
                     id: rs.rows.item(i).id,
                     name: rs.rows.item(i).name,
                     lat: rs.rows.item(i).lat,
-                    lon: rs.rows.item(i).lon
+                    lon: rs.rows.item(i).lon,
+                    tz: rs.rows.item(i).tz || ""
                 });
             }
         });
@@ -47,18 +49,19 @@ Page {
         _updateGlobeLocations();
     }
 
-    function addLocation(name, lat, lon) {
+    function addLocation(name, lat, lon, tz) {
         openDb();
         var newId = -1;
+        tz = tz || "";
         db.transaction(function(tx) {
             var maxOrder = tx.executeSql("SELECT COALESCE(MAX(sort_order),0) as mo FROM locations");
             var order = maxOrder.rows.item(0).mo + 1;
-            var rs = tx.executeSql("INSERT INTO locations (name, lat, lon, sort_order) VALUES (?, ?, ?, ?)",
-                                   [name, lat, lon, order]);
+            var rs = tx.executeSql("INSERT INTO locations (name, lat, lon, sort_order, tz) VALUES (?, ?, ?, ?, ?)",
+                                   [name, lat, lon, order, tz]);
             newId = rs.insertId;
         });
         if (newId >= 0) {
-            locationList.push({ id: newId, name: name, lat: lat, lon: lon });
+            locationList.push({ id: newId, name: name, lat: lat, lon: lon, tz: tz });
             locationListChanged();
             _updateGlobeLocations();
         }
@@ -138,7 +141,7 @@ Page {
                 onClicked: {
                     var picker = pageStack.push(Qt.resolvedUrl("LocationPicker.qml"));
                     picker.locationSelected.connect(function(loc) {
-                        mainPage.addLocation(loc.name, loc.lat, loc.lon);
+                        mainPage.addLocation(loc.name, loc.lat, loc.lon, loc.tz);
                         _refreshTick++;
                     });
                 }
@@ -228,19 +231,12 @@ Page {
                     locationName: modelData.name
                     locationLat: modelData.lat
                     locationLon: modelData.lon
-                    _expanded: _expandedIndex === index
+                    locationTz: modelData.tz || ""
 
                     property int _refresh: _refreshTick
                     on_RefreshChanged: refresh()
 
-                    onClicked: {
-                        if (_expandedIndex === index) {
-                            _expandedIndex = -1;
-                        } else {
-                            _expandedIndex = index;
-                            globe.flyTo(locationLat, locationLon);
-                        }
-                    }
+                    onClicked: globe.flyTo(locationLat, locationLon)
 
                     menu: Component {
                         ContextMenu {
