@@ -104,6 +104,24 @@ function addLocation(name, lat, lon, off) {
     return newId;
 }
 
+function migrateOffsets(cityOff) {
+    var db = openDb();
+    try {
+        db.transaction(function(tx) {
+            var rs = tx.executeSql("SELECT id, name FROM locations WHERE off_o IS NULL");
+            for (var i = 0; i < rs.rows.length; i++) {
+                var looked = cityOff[rs.rows.item(i).name];
+                if (looked) {
+                    tx.executeSql("UPDATE locations SET off_o=?, off_d=? WHERE id=?",
+                        [looked.o, looked.d, rs.rows.item(i).id]);
+                }
+            }
+        });
+    } catch (e) {
+        console.warn("store.js: migrateOffsets failed (" + e.message + ")");
+    }
+}
+
 function removeLocation(id) {
     var db = openDb();
     try {

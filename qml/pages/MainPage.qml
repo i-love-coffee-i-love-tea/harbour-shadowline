@@ -3,6 +3,7 @@ import Sailfish.Silica 1.0
 import QtQuick.LocalStorage 2.0
 import "../components"
 import "../js/store.js" as Store
+import "../js/cities.js" as Cities
 import "../js/constants.js" as Const
 
 Page {
@@ -179,6 +180,7 @@ Page {
     }
 
     Component.onCompleted: {
+        Store.migrateOffsets(Cities.cityOff);
         locationList = Store.loadLocations();
         _updateGlobeLocations();
     }
