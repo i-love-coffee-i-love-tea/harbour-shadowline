@@ -1,0 +1,66 @@
+name: Build RPM
+
+on:
+  push:
+    branches: [main, master]
+    paths-ignore:
+      - 'README.md'
+      - 'LICENSE'
+  pull_request:
+    branches: [main, master]
+  workflow_dispatch:
+
+env:
+  SDK_RELEASE: '5.1.0.11'
+  DOCKER_IMAGE: 'coderus/sailfishos-platform-sdk:5.1.0.11'
+
+jobs:
+  version-check:
+    name: Version Consistency Check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Check version consistency
+        run: |
+          SPEC_VERSION=$(grep '^Version:' rpm/harbour-shadowline.spec | awk '{print $2}')
+          APPDATA_VERSION=$(grep -oP '<release\s+version="\K[^"]+' rpm/harbour-shadowline.appdata.xml | head -1)
+          echo "Spec version: $SPEC_VERSION"
+          echo "AppData version: $APPDATA_VERSION"
+          if [ "$SPEC_VERSION" != "$APPDATA_VERSION" ]; then
+            echo "ERROR: Version mismatch! Spec=$SPEC_VERSION, AppData=$APPDATA_VERSION"
+            exit 1
+          fi
+
+  build-rpm:
+    name: Build RPM (${{ matrix.arch }})
+    needs: version-check
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        arch: [aarch64, armv7hl, i486]
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Pull SDK image
+        run: docker image pull ${{ env.DOCKER_IMAGE }}
+
+      - name: Build RPM package
+        run: |
+          chmod 777 "$PWD"
+          mkdir -p rpms && chmod 777 rpms
+          docker run --rm --privileged \
+            -v "$PWD:/home/mersdk/project" \
+            --workdir /home/mersdk/project \
+            ${{ env.DOCKER_IMAGE }} \
+            mb2 --no-fix-version --output-dir rpms \
+                -t SailfishOS-${{ env.SDK_RELEASE }}-${{ matrix.arch }} build
+
+      - name: Upload RPM Artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: harbour-shadowline-${{ matrix.arch }}-rpm
+          path: ./rpms/*.rpm
+          if-no-files-found: error

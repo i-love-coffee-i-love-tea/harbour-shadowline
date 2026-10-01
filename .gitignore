@@ -1,15 +1,18 @@
 # Build artifacts
+build/
+build-*/
+rpms/
 Makefile
 *.o
-harbour-shadowline
-RPMS/
-rpms/
+/harbour-shadowline
 
 # sfdk / SDK
 .sfdk/
 
-# Qt / qmake
-*.pro.user
+# Internal
+.mimocode/
+*.list
+.qmake.stash
 
 # OS
 .DS_Store
