@@ -18,6 +18,7 @@ Item {
     property bool hasSelection: !isNaN(selectedLat) && !isNaN(selectedLon)
     property bool isSpinning: spinAnim.running
     property bool _isDragging: false
+    property bool _needsHighAccuracy: false
     property real _spinFrom: 0
     property real spinProgress: isSpinning ? ((centerLongitude - _spinFrom) / 360 % 1 + 1) % 1 : 0
 
@@ -45,6 +46,7 @@ Item {
         easing.type: Easing.Linear
         onStopped: {
             _fastMode = false;
+            globe._needsHighAccuracy = false;
             spinTimer.stop();
             canvas.requestPaint();
         }
@@ -209,6 +211,7 @@ Item {
     function flyTo(lat, lon) {
         selectedLat = lat;
         selectedLon = lon;
+        _needsHighAccuracy = false;
         var curLon = centerLongitude;
         var diff = lon - curLon;
         while (diff > 180) diff -= 360;
@@ -458,7 +461,7 @@ Item {
             ctx.arc(cx, cy, R, 0, Math.PI * 2);
             ctx.clip();
 
-            var nightStep = (globe._fastMode || globe._isDragging) ? Const.NIGHT_SCANLINE_STEP : 1;
+            var nightStep = (globe._fastMode || globe._isDragging || !globe._needsHighAccuracy) ? Const.NIGHT_SCANLINE_STEP : 1;
 
             if (globe._fastMode && _geomLut && _lutCenterLat === cLat) {
                 var cLonR = cLon * Const.DEG;
@@ -492,6 +495,11 @@ Item {
 
             ctx.restore();
             _drawGlobeRing(ctx, cx, cy, R);
+
+            if (!globe._needsHighAccuracy) {
+                globe._needsHighAccuracy = true;
+                canvas.requestPaint();
+            }
         }
 
         Timer {
@@ -529,6 +537,7 @@ Item {
                 return;
             }
             globe._isDragging = true;
+            globe._needsHighAccuracy = false;
             spinAnim.stop();
             spinTimer.stop();
             globe._fastMode = false;
