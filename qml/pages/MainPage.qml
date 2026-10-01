@@ -62,7 +62,7 @@ Page {
 
             // Globe
             Item {
-                width: parent.width - (mainPage.isPortrait ? 2 * Theme.paddingSmall : 0)
+                width: parent.width - 2 * Theme.horizontalPageMargin
                 height: Math.min(width, Screen.height * Const.GLOBE_HEIGHT_FRACTION)
                 anchors.horizontalCenter: parent.horizontalCenter
 
@@ -76,19 +76,63 @@ Page {
                     onCenterLatitudeChanged: saveTimer.restart()
                 }
 
-                // Spin button — bottom-right of globe
-                IconButton {
+                // Spin button / progress circle — bottom-right of globe
+                Item {
+                    id: spinArea
+                    width: Theme.iconSizeMedium
+                    height: Theme.iconSizeMedium
                     anchors {
                         right: parent.right
                         rightMargin: Theme.paddingSmall
                         bottom: parent.bottom
                         bottomMargin: Theme.paddingSmall
                     }
-                    icon.source: "image://theme/icon-m-sync"
-                    enabled: !globe.isSpinning
-                    opacity: globe.isSpinning ? 0.3 : 0.7
-                    Behavior on opacity { FadeAnimation {} }
-                    onClicked: globe.spin()
+
+                    IconButton {
+                        anchors.centerIn: parent
+                        icon.source: "image://theme/icon-m-sync"
+                        visible: !globe.isSpinning
+                        opacity: 0.7
+                        onClicked: globe.spin()
+                    }
+
+                    Canvas {
+                        id: spinProgressCanvas
+                        anchors.fill: parent
+                        visible: globe.isSpinning
+
+                        property real progress: globe.spinProgress
+
+                        onProgressChanged: requestPaint()
+                        onVisibleChanged: if (visible) requestPaint()
+
+                        onPaint: {
+                            var ctx = getContext("2d");
+                            ctx.reset();
+                            var cx = width / 2;
+                            var cy = height / 2;
+                            var r = cx - 2;
+                            var lw = 2;
+
+                            // Background ring
+                            ctx.beginPath();
+                            ctx.arc(cx, cy, r, 0, 2 * Math.PI);
+                            ctx.strokeStyle = Qt.rgba(Theme.highlightColor.r, Theme.highlightColor.g,
+                                                       Theme.highlightColor.b, 0.2);
+                            ctx.lineWidth = lw;
+                            ctx.stroke();
+
+                            // Progress arc
+                            var startAngle = -Math.PI / 2;
+                            var endAngle = startAngle + progress * 2 * Math.PI;
+                            ctx.beginPath();
+                            ctx.arc(cx, cy, r, startAngle, endAngle);
+                            ctx.strokeStyle = Theme.highlightColor;
+                            ctx.lineWidth = lw;
+                            ctx.lineCap = "round";
+                            ctx.stroke();
+                        }
+                    }
                 }
             }
 

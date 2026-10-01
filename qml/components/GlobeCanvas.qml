@@ -17,6 +17,8 @@ Item {
     property real selectedLon: NaN
     property bool hasSelection: !isNaN(selectedLat) && !isNaN(selectedLon)
     property bool isSpinning: spinAnim.running
+    property real _spinFrom: 0
+    property real spinProgress: isSpinning ? ((centerLongitude - _spinFrom) / 360 % 1 + 1) % 1 : 0
 
     NumberAnimation {
         id: flyAnim
@@ -228,6 +230,7 @@ Item {
         var cur = centerLongitude;
         spinAnim.from = cur;
         spinAnim.to = cur + 360;
+        _spinFrom = cur;
         if (!_fastMode || _lutCenterLat !== centerLatitude) {
             _buildLuts(_radius, _cx, _cy);
         }
