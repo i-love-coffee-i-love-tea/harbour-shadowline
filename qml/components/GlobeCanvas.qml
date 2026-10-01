@@ -60,7 +60,7 @@ Item {
     property real _lutCenterLat: NaN
     property bool _fastMode: false
 
-    function _buildGeomLut(segments, R, cx, cy, cLatR) {
+    function _buildGeomLut(segments, R, cLatR) {
         var sinCLat = Math.sin(cLatR);
         var cosCLat = Math.cos(cLatR);
         var lut = [];
@@ -72,10 +72,21 @@ Item {
                 var lonR = seg[i][0] * Const.DEG;
                 var sinLat = Math.sin(latR);
                 var cosLat = Math.cos(latR);
-                var x = R * cosLat * Math.sin(lonR);
-                var y = R * (cosCLat * sinLat - sinCLat * cosLat * Math.cos(lonR));
-                var z = sinCLat * sinLat + cosCLat * cosLat * Math.cos(lonR);
-                segLut.push({ sinLat: sinLat, cosLat: cosLat, x: x, y: y, visible: z >= 0 });
+                var sinLon = Math.sin(lonR);
+                var cosLon = Math.cos(lonR);
+                // Pre-computed products (no cLon dependency)
+                var rCosLatSinLon = R * cosLat * sinLon;
+                var rCosLatCosLon = R * cosLat * cosLon;
+                var rSinLat = R * sinLat;
+                // z = sin(cLat)*sin(lat) + cos(cLat)*cos(lat)*cos(lon-cLon)
+                // At cLonR=0: z0 = sinCLat*sinLat + cosCLat*cosLat*cosLon
+                var z = sinCLat * sinLat + cosCLat * cosLat * cosLon;
+                segLut.push({
+                    rSinLat: rSinLat,
+                    rCosLatSinLon: rCosLatSinLon,
+                    rCosLatCosLon: rCosLatCosLon,
+                    z: z
+                });
             }
             lut.push(segLut);
         }
@@ -119,19 +130,21 @@ Item {
     function _buildLuts(R, cx, cy) {
         var cLatR = globe.centerLatitude * Const.DEG;
         _geomLut = {
-            coast: _buildGeomLut(Coast.segments, R, cx, cy, cLatR),
-            borders: _buildGeomLut(Borders.segments, R, cx, cy, cLatR)
+            coast: _buildGeomLut(Coast.segments, R, cLatR),
+            borders: _buildGeomLut(Borders.segments, R, cLatR)
         };
         _screenLut = _buildScreenLut(cx, cy, R, cLatR);
         _lutCenterLat = globe.centerLatitude;
     }
 
-    function _drawSegmentsFast(ctx, lut, lineWidth, strokeStyle, cLonR) {
+    function _drawSegmentsFast(ctx, lut, lineWidth, strokeStyle, cLonR, cLatR) {
         ctx.strokeStyle = strokeStyle;
         ctx.lineWidth = lineWidth;
         ctx.lineJoin = Const.COASTLINE_LINE_JOIN;
-        var cosCLon = Math.cos(-cLonR);
-        var sinCLon = Math.sin(-cLonR);
+        var cosCLon = Math.cos(cLonR);
+        var sinCLon = Math.sin(cLonR);
+        var sinCLat = Math.sin(cLatR);
+        var cosCLat = Math.cos(cLatR);
         var cx = globe._cx;
         var cy = globe._cy;
         for (var s = 0; s < lut.length; s++) {
@@ -140,9 +153,15 @@ Item {
             ctx.beginPath();
             for (var i = 0; i < seg.length; i++) {
                 var pt = seg[i];
-                if (pt.visible) {
-                    var sx = cx + pt.x * cosCLon - pt.y * sinCLon;
-                    var sy = cy - pt.x * sinCLon - pt.y * cosCLon;
+                // x = R*cos(lat)*sin(lon-cLon)
+                var x = pt.rCosLatSinLon * cosCLon - pt.rCosLatCosLon * sinCLon;
+                // cos(lat)*cos(lon-cLon) — shared by y and z
+                var cosLonC = pt.rCosLatCosLon * cosCLon + pt.rCosLatSinLon * sinCLon;
+                var y = cosCLat * pt.rSinLat - sinCLat * cosLonC;
+                var z = sinCLat * pt.rSinLat + cosCLat * cosLonC;
+                if (z >= 0) {
+                    var sx = cx + x;
+                    var sy = cy - y;
                     if (!started) { ctx.moveTo(sx, sy); started = true; }
                     else ctx.lineTo(sx, sy);
                 } else {
@@ -437,13 +456,14 @@ Item {
 
             if (globe._fastMode && _geomLut && _lutCenterLat === cLat) {
                 var cLonR = cLon * Const.DEG;
-                _drawNightSideFast(ctx, _screenLut, cLonR, R, cx, cy);
-                _drawSegmentsFast(ctx, _geomLut.coast, Const.COASTLINE_LINE_WIDTH, Theme.highlightColor, cLonR);
+                var cLatR = cLat * Const.DEG;
+                _drawNightSide(ctx, cx, cy, R, cLat, cLon);
+                _drawSegmentsFast(ctx, _geomLut.coast, Const.COASTLINE_LINE_WIDTH, Theme.highlightColor, cLonR, cLatR);
                 _drawSegmentsFast(ctx, _geomLut.borders, Const.BORDER_LINE_WIDTH,
                     Qt.rgba(Theme.secondaryHighlightColor.r,
                             Theme.secondaryHighlightColor.g,
                             Theme.secondaryHighlightColor.b,
-                            Const.BORDER_ALPHA), cLonR);
+                            Const.BORDER_ALPHA), cLonR, cLatR);
                 var ss = Solar.subsolarPoint(new Date());
                 _drawSun(ctx, Proj.project(ss.lat, ss.lon, cLat, cLon, R, cx, cy));
             } else {
