@@ -184,7 +184,7 @@ Page {
                             name: modelData.name,
                             lat: modelData.lat,
                             lon: modelData.lon,
-                            tz: Cities.getTimezone(modelData.name)
+                            off: Cities.getOffset(modelData.name)
                         });
                         pageStack.pop();
                     }

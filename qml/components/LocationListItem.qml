@@ -1,6 +1,7 @@
 import QtQuick 2.6
 import Sailfish.Silica 1.0
 import "../js/solar.js" as Solar
+import "../js/timezone.js" as Timezone
 
 ListItem {
     id: locationItem
@@ -8,12 +9,10 @@ ListItem {
     property string locationName: ""
     property real locationLat: 0
     property real locationLon: 0
-    property string locationTz: ""
+    property var locationOff: null  // {o: utcOffsetHours, d: dstFlag} or null
     property bool _isNight: false
     property string _dayLength: ""
-    property string _solarNoon: ""
     property string _currentTime: ""
-    property string _nextChangeEvent: ""
     property string _timeUntilChange: ""
 
     contentHeight: mainRow.height + 2 * Theme.paddingSmall
@@ -129,31 +128,6 @@ ListItem {
         return h + "h " + m + "m";
     }
 
-    function _getLocalTime(tz, lon) {
-        var now = new Date();
-        if (tz) {
-            try {
-                var parts = new Intl.DateTimeFormat('en-GB', {
-                    timeZone: tz,
-                    hour: 'numeric', minute: 'numeric', hour12: false, hourCycle: 'h23'
-                }).formatToParts(now);
-                var h = 0, m = 0;
-                for (var i = 0; i < parts.length; i++) {
-                    if (parts[i].type === 'hour') h = parseInt(parts[i].value);
-                    else if (parts[i].type === 'minute') m = parseInt(parts[i].value);
-                }
-                return (h < 10 ? "0" : "") + h + ":" + (m < 10 ? "0" : "") + m;
-            } catch (e) {
-                console.warn("LocationListItem: Intl.DateTimeFormat failed for tz='" + tz + "' (" + e.message + ")");
-            }
-        }
-        var utcMs = now.getTime() + now.getTimezoneOffset() * 60000;
-        var offsetH = Math.round(lon / 15);
-        var local = new Date(utcMs + offsetH * 3600000);
-        var lh = local.getHours(), lm = local.getMinutes();
-        return (lh < 10 ? "0" : "") + lh + ":" + (lm < 10 ? "0" : "") + lm;
-    }
-
     function _formatCountdown(ms) {
         if (ms <= 0) return qsTr("now");
         var totalMin = Math.floor(ms / 60000);
@@ -176,9 +150,10 @@ ListItem {
     }
 
     function updateTimes() {
+        try {
         var now = new Date();
         var data = Solar.solarData(now, locationLat, locationLon);
-        _currentTime = _getLocalTime(locationTz, locationLon);
+        _currentTime = Timezone.getLocalTime(locationOff, locationLat, locationLon);
 
         if (data.polarDay) {
             sunriseLabel.text = qsTr("Polar day");
@@ -186,7 +161,6 @@ ListItem {
             solarNoonLabel.text = "--:--";
             _isNight = false;
             _dayLength = "24h 0m";
-            _nextChangeEvent = "";
             _timeUntilChange = "";
             return;
         }
@@ -197,15 +171,14 @@ ListItem {
             solarNoonLabel.text = "--:--";
             _isNight = true;
             _dayLength = "0h 0m";
-            _nextChangeEvent = "";
             _timeUntilChange = "";
             return;
         }
 
         // Normal case
-        sunriseLabel.text = Solar.formatTime(data.sunrise);
-        sunsetLabel.text = Solar.formatTime(data.sunset);
-        solarNoonLabel.text = Solar.formatTime(data.solarNoon);
+        sunriseLabel.text = Timezone.formatLocationTime(data.sunrise, locationOff, locationLat, locationLon);
+        sunsetLabel.text = Timezone.formatLocationTime(data.sunset, locationOff, locationLat, locationLon);
+        solarNoonLabel.text = Timezone.formatLocationTime(data.solarNoon, locationOff, locationLat, locationLon);
         _isNight = (now < data.sunrise || now > data.sunset);
 
         var diffMs = data.sunset.getTime() - data.sunrise.getTime();
@@ -217,8 +190,15 @@ ListItem {
         } else {
             _timeUntilChange = "";
         }
+        } catch (e) {
+            console.warn("LocationListItem: updateTimes failed for " + locationName + " (" + e.message + ")");
+            sunriseLabel.text = "--:--";
+            sunsetLabel.text = "--:--";
+            solarNoonLabel.text = "--:--";
+        }
     }
 
-    Component.onCompleted: updateTimes()
     function refresh() { updateTimes(); }
+
+    Component.onCompleted: { updateTimes(); }
 }

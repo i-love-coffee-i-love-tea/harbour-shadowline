@@ -1,9 +1,9 @@
 import QtQuick 2.6
 import Sailfish.Silica 1.0
-import QtQuick.LocalStorage 2.0
 import "../js/solar.js" as Solar
 import "../js/store.js" as Store
 import "../js/constants.js" as Const
+import "../js/timezone.js" as Timezone
 
 CoverBackground {
     id: cover
@@ -50,7 +50,7 @@ CoverBackground {
         }
 
         Label {
-            text: "Shadow Line"
+            text: qsTr("Shadow Line")
             anchors.horizontalCenter: parent.horizontalCenter
             font.pixelSize: Theme.fontSizeMedium
             color: Theme.highlightColor
@@ -86,6 +86,10 @@ CoverBackground {
             var loc = locs[0];
             cover.locationName = loc.name;
 
+            // Compute offset for this location
+            var offset = Timezone.totalOffset(loc.off, loc.lat);
+            if (offset === null) offset = Timezone.longitudeFallbackOffset(loc.lon);
+
             var data = Solar.solarData(new Date(), loc.lat, loc.lon);
             if (data.polarDay) {
                 cover.nextEvent = qsTr("Polar day");
@@ -97,16 +101,16 @@ CoverBackground {
                 var now = new Date();
                 if (data.sunrise && data.sunrise > now) {
                     cover.nextEvent = "\u2191"; // ↑
-                    cover.nextTime = Solar.formatTime(data.sunrise);
+                    cover.nextTime = Solar.formatTimeInZone(data.sunrise, offset);
                 } else if (data.sunset && data.sunset > now) {
                     cover.nextEvent = "\u2193"; // ↓
-                    cover.nextTime = Solar.formatTime(data.sunset);
+                    cover.nextTime = Solar.formatTimeInZone(data.sunset, offset);
                 } else {
                     cover.nextEvent = "\u2191";
                     var tomorrow = new Date(now);
                     tomorrow.setDate(tomorrow.getDate() + 1);
                     var td = Solar.solarData(tomorrow, loc.lat, loc.lon);
-                    cover.nextTime = Solar.formatTime(td.sunrise);
+                    cover.nextTime = Solar.formatTimeInZone(td.sunrise, offset);
                 }
             }
         } catch (e) {

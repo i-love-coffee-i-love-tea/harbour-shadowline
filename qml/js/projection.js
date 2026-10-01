@@ -1,6 +1,7 @@
 .pragma library
+.import "constants.js" as Const
 
-var DEG = Math.PI / 180;
+var DEG = Const.DEG;
 
 // Project lat/lon to screen coordinates using orthographic projection
 // Returns { x, y, visible } or null if on back hemisphere

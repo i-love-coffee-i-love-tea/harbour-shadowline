@@ -39,9 +39,9 @@ Page {
                 onClicked: {
                     var picker = pageStack.push(Qt.resolvedUrl("LocationPicker.qml"));
                     picker.locationSelected.connect(function(loc) {
-                        var newId = Store.addLocation(loc.name, loc.lat, loc.lon, loc.tz);
+                        var newId = Store.addLocation(loc.name, loc.lat, loc.lon, loc.off);
                         if (newId >= 0) {
-                            locationList.push({ id: newId, name: loc.name, lat: loc.lat, lon: loc.lon, tz: loc.tz || "" });
+                            locationList.push({ id: newId, name: loc.name, lat: loc.lat, lon: loc.lon, off: loc.off || null });
                             locationListChanged();
                             _updateGlobeLocations();
                         }
@@ -61,8 +61,9 @@ Page {
 
             // Globe
             Item {
-                width: parent.width
-                height: Math.min(parent.width, Screen.height * Const.GLOBE_HEIGHT_FRACTION)
+                width: parent.width - (mainPage.isPortrait ? 2 * Theme.paddingSmall : 0)
+                height: Math.min(width, Screen.height * Const.GLOBE_HEIGHT_FRACTION)
+                anchors.horizontalCenter: parent.horizontalCenter
 
                 GlobeCanvas {
                     id: globe
@@ -134,7 +135,7 @@ Page {
                     locationName: modelData.name
                     locationLat: modelData.lat
                     locationLon: modelData.lon
-                    locationTz: modelData.tz || ""
+                    locationOff: modelData.off || null
 
                     property int _refresh: _refreshTick
                     on_RefreshChanged: refresh()

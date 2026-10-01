@@ -18,7 +18,7 @@ Page {
             Label {
                 x: Theme.horizontalPageMargin
                 width: parent.width - 2 * Theme.horizontalPageMargin
-                text: "Shadow Line"
+                text: qsTr("Shadow Line")
                 font.pixelSize: Theme.fontSizeExtraLarge
                 color: Theme.highlightColor
             }
@@ -26,7 +26,7 @@ Page {
             Label {
                 x: Theme.horizontalPageMargin
                 width: parent.width - 2 * Theme.horizontalPageMargin
-                text: qsTr("Version 1.0.0")
+                text: qsTr("Version 1.0.8")
                 color: Theme.secondaryColor
                 font.pixelSize: Theme.fontSizeSmall
             }

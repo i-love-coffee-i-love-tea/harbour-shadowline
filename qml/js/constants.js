@@ -11,6 +11,7 @@ var DB_SIZE = 1000000;
 // --- Defaults ---
 var DEFAULT_CENTER_LON = 30.0;
 var DEFAULT_CENTER_LAT = 25.0;
+var DEGREES_PER_HOUR = 15;
 
 // --- Globe rendering ---
 var GLOBE_HEIGHT_FRACTION = 0.45;
