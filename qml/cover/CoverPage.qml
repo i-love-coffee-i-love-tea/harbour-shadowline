@@ -1,5 +1,6 @@
 import QtQuick 2.6
 import Sailfish.Silica 1.0
+import "../components"
 import "../js/solar.js" as Solar
 import "../js/store.js" as Store
 import "../js/constants.js" as Const
@@ -8,130 +9,132 @@ import "../js/timezone.js" as Timezone
 CoverBackground {
     id: cover
 
-    property string nextEvent: ""
-    property string nextTime: ""
     property string locationName: ""
+    property string _countdownText: ""
+    property bool _isNight: false
+    property real _globeLon: Const.DEFAULT_CENTER_LON
+    property real _globeLat: Const.DEFAULT_CENTER_LAT
+    property var _locations: []
 
+    // Mini wire globe filling the cover
+    GlobeCanvas {
+        id: coverGlobe
+        anchors.fill: parent
+        anchors.margins: Theme.paddingLarge
+        centerLongitude: cover._globeLon
+        centerLatitude: cover._globeLat
+        locations: cover._locations
+    }
+
+    // Labels overlay at bottom
     Column {
-        anchors.centerIn: parent
-        spacing: Theme.paddingSmall
-
-        // Sun icon
-        Canvas {
-            width: Const.COVER_CANVAS_SIZE
-            height: Const.COVER_CANVAS_SIZE
-            anchors.horizontalCenter: parent.horizontalCenter
-
-            onPaint: {
-                var ctx = getContext("2d");
-                var size = Const.COVER_CANVAS_SIZE;
-                ctx.clearRect(0, 0, size, size);
-                var half = size / 2;
-
-                // Sun circle
-                ctx.beginPath();
-                ctx.arc(half, half, Const.COVER_SUN_RADIUS, 0, Math.PI * 2);
-                ctx.fillStyle = Theme.highlightColor;
-                ctx.fill();
-
-                // Rays
-                ctx.strokeStyle = Theme.highlightColor;
-                ctx.lineWidth = Const.COVER_RAY_LINE_WIDTH;
-                for (var i = 0; i < Const.COVER_RAY_COUNT; i++) {
-                    var angle = (i / Const.COVER_RAY_COUNT) * Math.PI * 2;
-                    ctx.beginPath();
-                    ctx.moveTo(half + Math.cos(angle) * Const.COVER_RAY_INNER,
-                               half + Math.sin(angle) * Const.COVER_RAY_INNER);
-                    ctx.lineTo(half + Math.cos(angle) * Const.COVER_RAY_OUTER,
-                               half + Math.sin(angle) * Const.COVER_RAY_OUTER);
-                    ctx.stroke();
-                }
-            }
+        anchors {
+            bottom: parent.bottom
+            bottomMargin: Theme.paddingSmall
+            horizontalCenter: parent.horizontalCenter
         }
-
-        Label {
-            text: qsTr("Shadow Line")
-            anchors.horizontalCenter: parent.horizontalCenter
-            font.pixelSize: Theme.fontSizeMedium
-            color: Theme.highlightColor
-        }
+        spacing: 2
 
         Label {
             visible: cover.locationName.length > 0
             text: cover.locationName
             anchors.horizontalCenter: parent.horizontalCenter
             font.pixelSize: Theme.fontSizeSmall
-            color: Theme.primaryColor
+            color: Theme.highlightColor
         }
 
         Label {
-            visible: cover.nextEvent.length > 0
-            text: cover.nextEvent + " " + cover.nextTime
+            visible: cover._countdownText.length > 0
+            text: cover._countdownText
             anchors.horizontalCenter: parent.horizontalCenter
             font.pixelSize: Theme.fontSizeExtraSmall
             color: Theme.secondaryColor
         }
     }
 
-    // Load first location from DB and compute next event
+    function _formatCountdown(ms) {
+        if (ms <= 0) return qsTr("now");
+        var totalMin = Math.floor(ms / 60000);
+        var h = Math.floor(totalMin / 60);
+        var m = totalMin % 60;
+        if (h > 0) return h + "h " + m + "m";
+        return m + "m";
+    }
+
     function refreshCover() {
         try {
             var locs = Store.loadLocations();
+            if (locs.length > 0) {
+                cover._globeLon = locs[0].lon;
+                cover._globeLat = locs[0].lat;
+                var gLocs = [];
+                for (var i = 0; i < locs.length; i++)
+                    gLocs.push({ lat: locs[i].lat, lon: locs[i].lon });
+                cover._locations = gLocs;
+                coverGlobe.repaint();
+            }
             if (locs.length === 0) {
                 cover.locationName = "";
-                cover.nextEvent = "";
-                cover.nextTime = "";
+                cover._countdownText = "";
                 return;
             }
             var loc = locs[0];
             cover.locationName = loc.name;
 
-            // Compute offset for this location
-            var offset = Timezone.totalOffset(loc.off, loc.lat);
-            if (offset === null) offset = Timezone.longitudeFallbackOffset(loc.lon);
+            var now = new Date();
+            var data = Solar.solarData(now, loc.lat, loc.lon);
 
-            var data = Solar.solarData(new Date(), loc.lat, loc.lon);
             if (data.polarDay) {
-                cover.nextEvent = qsTr("Polar day");
-                cover.nextTime = "";
-            } else if (data.polarNight) {
-                cover.nextEvent = qsTr("Polar night");
-                cover.nextTime = "";
-            } else {
-                var now = new Date();
-                if (data.sunrise && data.sunrise > now) {
-                    cover.nextEvent = "\u2191"; // ↑
-                    cover.nextTime = Solar.formatTimeInZone(data.sunrise, offset);
-                } else if (data.sunset && data.sunset > now) {
-                    cover.nextEvent = "\u2193"; // ↓
-                    cover.nextTime = Solar.formatTimeInZone(data.sunset, offset);
-                } else {
-                    cover.nextEvent = "\u2191";
-                    var tomorrow = new Date(now);
-                    tomorrow.setDate(tomorrow.getDate() + 1);
+                cover._isNight = false;
+                cover._countdownText = qsTr("Polar day");
+                return;
+            }
+            if (data.polarNight) {
+                cover._isNight = true;
+                cover._countdownText = qsTr("Polar night");
+                return;
+            }
+
+            var isNight = (now < data.sunrise || now > data.sunset);
+            cover._isNight = isNight;
+
+            var nextChangeMs = null;
+            if (isNight) {
+                if (now > data.sunset) {
+                    var tomorrow = new Date(now.getTime() + 86400000);
                     var td = Solar.solarData(tomorrow, loc.lat, loc.lon);
-                    cover.nextTime = Solar.formatTimeInZone(td.sunrise, offset);
+                    nextChangeMs = td.sunrise ? td.sunrise.getTime() : null;
+                } else {
+                    nextChangeMs = data.sunrise ? data.sunrise.getTime() : null;
                 }
+            } else {
+                nextChangeMs = data.sunset ? data.sunset.getTime() : null;
+            }
+
+            if (nextChangeMs !== null) {
+                var countdown = _formatCountdown(nextChangeMs - now.getTime());
+                var label = isNight ? qsTr("day") : qsTr("night");
+                cover._countdownText = label + " \u2192 " + countdown; // "day → 2h 15m"
+            } else {
+                cover._countdownText = "";
             }
         } catch (e) {
             console.warn("CoverPage: refreshCover failed (" + e.message + ")");
             cover.locationName = "";
-            cover.nextEvent = "";
-            cover.nextTime = "";
+            cover._countdownText = "";
         }
     }
 
     Component.onCompleted: refreshCover()
 
-    // Refresh cover every 5 minutes
+    // Refresh every minute for accurate countdown
     Timer {
-        interval: Const.COVER_REFRESH_INTERVAL
+        interval: 60000
         running: true
         repeat: true
         onTriggered: refreshCover()
     }
 
-    // Also refresh when cover becomes visible
     onStatusChanged: {
         if (status === Cover.Active) {
             refreshCover();
