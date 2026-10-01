@@ -146,6 +146,12 @@ Page {
                     menu: Component {
                         ContextMenu {
                             MenuItem {
+                                text: qsTr("Pin to cover")
+                                onClicked: {
+                                    Store.saveCoverLocationId(locationList[index].id);
+                                }
+                            }
+                            MenuItem {
                                 text: qsTr("Delete")
                                 onClicked: {
                                     var idx = index;

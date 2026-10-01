@@ -171,3 +171,11 @@ function saveCenterLon(lon) {
 function saveCenterLat(lat) {
     saveSetting('centerLat', lat);
 }
+
+function loadCoverLocationId() {
+    return loadSetting('coverLocationId', -1);
+}
+
+function saveCoverLocationId(id) {
+    saveSetting('coverLocationId', id);
+}

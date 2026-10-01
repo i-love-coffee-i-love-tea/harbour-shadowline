@@ -89,7 +89,11 @@ CoverBackground {
                 cover._countdownText = "";
                 return;
             }
+            var coverId = Store.loadCoverLocationId();
             var loc = locs[0];
+            for (var i = 0; i < locs.length; i++) {
+                if (locs[i].id === coverId) { loc = locs[i]; break; }
+            }
             cover.locationName = loc.name;
 
             var now = new Date();
