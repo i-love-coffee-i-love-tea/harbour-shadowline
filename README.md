@@ -3,10 +3,10 @@
 An interactive globe for Sailfish OS showing real-time day/night shading and sunrise/sunset times.
 
 <p align="center">
-<img src="screenshots/Screenshot_20261001_212629_001.png" width="24%">
 <img src="screenshots/Screenshot_20261001_214253_001.png" width="24%">
-<img src="screenshots/Screenshot_20261002_000355_001.png" width="24%">
-<img src="screenshots/Screenshot_20261002_000405_001.png" width="24%">
+<img src="screenshots/Screenshot_20261002_004006_001.png" width="24%">
+<img src="screenshots/Screenshot_20261002_004012_001.png" width="24%">
+<img src="screenshots/Screenshot_20261002_004241_001.png" width="24%">
 </p>
 
 ## Features
