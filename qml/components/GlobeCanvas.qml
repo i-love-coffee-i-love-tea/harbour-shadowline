@@ -29,6 +29,7 @@ Item {
         property: "centerLongitude"
         duration: 600
         easing.type: Easing.InOutQuad
+        onStopped: { globe._needsHighAccuracy = false; fineRepaintTimer.start(); }
     }
 
     NumberAnimation {
@@ -49,7 +50,7 @@ Item {
             _fastMode = false;
             globe._needsHighAccuracy = false;
             spinTimer.stop();
-            canvas.requestPaint();
+            fineRepaintTimer.start();
         }
     }
 
@@ -494,11 +495,11 @@ Item {
             ctx.restore();
             _drawGlobeRing(ctx, cx, cy, R);
 
-            if (!globe._needsHighAccuracy) {
+            if (!globe._needsHighAccuracy && !globe._isDragging && !globe._fastMode) {
                 globe._cachedSS = ss;
                 globe._needsHighAccuracy = true;
                 fineRepaintTimer.start();
-            } else {
+            } else if (globe._needsHighAccuracy && !globe._isDragging) {
                 globe._cachedSS = null;
             }
         }
@@ -566,8 +567,8 @@ Item {
             _lastX = mouse.x;
             _lastY = mouse.y;
         }
-        onReleased: { _dragging = false; globe._isDragging = false; }
-        onCanceled: { _dragging = false; globe._isDragging = false; }
+        onReleased: { _dragging = false; globe._isDragging = false; globe._needsHighAccuracy = false; fineRepaintTimer.start(); }
+        onCanceled: { _dragging = false; globe._isDragging = false; globe._needsHighAccuracy = false; fineRepaintTimer.start(); }
     }
 
     function repaint() { canvas.requestPaint(); }
