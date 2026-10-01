@@ -1,4 +1,5 @@
 import QtQuick 2.6
+import QtQuick.LocalStorage 2.0
 import Sailfish.Silica 1.0
 import "../components"
 import "../js/solar.js" as Solar
@@ -16,23 +17,33 @@ CoverBackground {
     property real _globeLat: Const.DEFAULT_CENTER_LAT
     property var _locations: []
 
-    // Mini wire globe filling the cover
+    // Mini wire globe at top
     GlobeCanvas {
         id: coverGlobe
-        anchors.fill: parent
-        anchors.margins: Theme.paddingLarge
+        anchors {
+            top: parent.top
+            topMargin: Theme.paddingSmall
+            left: parent.left
+            leftMargin: Theme.paddingSmall
+            right: parent.right
+            rightMargin: Theme.paddingSmall
+        }
+        height: width
+        z: 0
         centerLongitude: cover._globeLon
         centerLatitude: cover._globeLat
         locations: cover._locations
     }
 
-    // Labels overlay at bottom
+    // Labels below globe
     Column {
+        id: labelsColumn
         anchors {
-            bottom: parent.bottom
-            bottomMargin: Theme.paddingSmall
+            top: coverGlobe.bottom
+            topMargin: Theme.paddingSmall
             horizontalCenter: parent.horizontalCenter
         }
+        z: 1
         spacing: 2
 
         Label {
