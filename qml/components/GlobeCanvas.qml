@@ -19,6 +19,7 @@ Item {
     property bool isSpinning: spinAnim.running
     property bool _isDragging: false
     property bool _needsHighAccuracy: false
+    property var _cachedSS: null
     property real _spinFrom: 0
     property real spinProgress: isSpinning ? ((centerLongitude - _spinFrom) / 360 % 1 + 1) % 1 : 0
 
@@ -289,11 +290,9 @@ Item {
             return { lat: lat, lon: lon };
         }
 
-        function _drawNightSide(ctx, cx, cy, R, cLat, cLon, step) {
+        function _drawNightSide(ctx, cx, cy, R, cLat, cLon, step, ss) {
             var cLatR = cLat * Const.DEG;
             var cLonR = cLon * Const.DEG;
-            var now = new Date();
-            var ss = Solar.subsolarPoint(now);
             var ssLatR = ss.lat * Const.DEG;
             var ssLonR = ss.lon * Const.DEG;
             step = step || Const.NIGHT_SCANLINE_STEP;
@@ -462,22 +461,22 @@ Item {
             ctx.clip();
 
             var nightStep = (globe._fastMode || globe._isDragging || !globe._needsHighAccuracy) ? Const.NIGHT_SCANLINE_STEP : 2;
+            var ss = globe._cachedSS || Solar.subsolarPoint(new Date());
 
             if (globe._fastMode && _geomLut && _lutCenterLat === cLat) {
                 var cLonR = cLon * Const.DEG;
                 var cLatR = cLat * Const.DEG;
-                _drawNightSide(ctx, cx, cy, R, cLat, cLon, nightStep);
+                _drawNightSide(ctx, cx, cy, R, cLat, cLon, nightStep, ss);
                 _drawSegmentsFast(ctx, _geomLut.coast, Const.COASTLINE_LINE_WIDTH, Theme.highlightColor, cLonR, cLatR);
                 _drawSegmentsFast(ctx, _geomLut.borders, Const.BORDER_LINE_WIDTH,
                     Qt.rgba(Theme.secondaryHighlightColor.r,
                             Theme.secondaryHighlightColor.g,
                             Theme.secondaryHighlightColor.b,
                             Const.BORDER_ALPHA), cLonR, cLatR);
-                var ss = Solar.subsolarPoint(new Date());
                 _drawSun(ctx, Proj.project(ss.lat, ss.lon, cLat, cLon, R, cx, cy));
             } else {
                 _fastMode = false;
-                _drawNightSide(ctx, cx, cy, R, cLat, cLon, nightStep);
+                _drawNightSide(ctx, cx, cy, R, cLat, cLon, nightStep, ss);
                 _drawSegments(ctx, Coast.segments, cLat, cLon, R, cx, cy,
                               Const.COASTLINE_LINE_WIDTH, Theme.highlightColor);
                 _drawSegments(ctx, Borders.segments, cLat, cLon, R, cx, cy,
@@ -486,7 +485,6 @@ Item {
                                       Theme.secondaryHighlightColor.g,
                                       Theme.secondaryHighlightColor.b,
                                       Const.BORDER_ALPHA));
-                var ss = Solar.subsolarPoint(new Date());
                 _drawSun(ctx, Proj.project(ss.lat, ss.lon, cLat, cLon, R, cx, cy));
             }
 
@@ -497,8 +495,11 @@ Item {
             _drawGlobeRing(ctx, cx, cy, R);
 
             if (!globe._needsHighAccuracy) {
+                globe._cachedSS = ss;
                 globe._needsHighAccuracy = true;
-                canvas.requestPaint();
+                fineRepaintTimer.start();
+            } else {
+                globe._cachedSS = null;
             }
         }
 
@@ -507,6 +508,12 @@ Item {
             running: true
             repeat: true
             onTriggered: canvas._tick++
+        }
+
+        Timer {
+            id: fineRepaintTimer
+            interval: 1
+            onTriggered: canvas.requestPaint()
         }
 
         on_TickChanged: requestPaint()
