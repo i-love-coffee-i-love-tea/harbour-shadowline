@@ -59,7 +59,7 @@ CoverBackground {
             text: cover._countdownText
             anchors.horizontalCenter: parent.horizontalCenter
             font.pixelSize: Theme.fontSizeExtraSmall
-            color: Theme.secondaryColor
+            color: Theme.primaryColor
         }
     }
 
