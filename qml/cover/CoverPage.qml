@@ -76,17 +76,17 @@ CoverBackground {
         try {
             var locs = Store.loadLocations();
             if (locs.length > 0) {
-                cover._globeLon = locs[0].lon;
-                cover._globeLat = locs[0].lat;
                 var gLocs = [];
                 for (var i = 0; i < locs.length; i++)
                     gLocs.push({ lat: locs[i].lat, lon: locs[i].lon });
                 cover._locations = gLocs;
-                coverGlobe.repaint();
             }
             if (locs.length === 0) {
                 cover.locationName = "";
                 cover._countdownText = "";
+                cover._globeLon = Const.DEFAULT_CENTER_LON;
+                cover._globeLat = Const.DEFAULT_CENTER_LAT;
+                coverGlobe.repaint();
                 return;
             }
             var coverId = Store.loadCoverLocationId();
@@ -94,6 +94,9 @@ CoverBackground {
             for (var i = 0; i < locs.length; i++) {
                 if (locs[i].id === coverId) { loc = locs[i]; break; }
             }
+            cover._globeLon = loc.lon;
+            cover._globeLat = loc.lat;
+            coverGlobe.repaint();
             cover.locationName = loc.name;
 
             var now = new Date();
