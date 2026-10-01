@@ -40,6 +40,148 @@ Item {
         property: "centerLongitude"
         duration: 20000
         easing.type: Easing.Linear
+        onStopped: {
+            _fastMode = false;
+            spinTimer.stop();
+            canvas.requestPaint();
+        }
+    }
+
+    Timer {
+        id: spinTimer
+        interval: 33
+        repeat: true
+        onTriggered: canvas.requestPaint()
+    }
+
+    // Pre-computed lookup tables for fast spin rendering
+    property var _geomLut: null   // [{sinLat, cosLat, x, y}, ...] per geometry point
+    property var _screenLut: null // [{y, latR}, ...] per scanline
+    property real _lutCenterLat: NaN
+    property bool _fastMode: false
+
+    function _buildGeomLut(segments, R, cx, cy, cLatR) {
+        var sinCLat = Math.sin(cLatR);
+        var cosCLat = Math.cos(cLatR);
+        var lut = [];
+        for (var s = 0; s < segments.length; s++) {
+            var seg = segments[s];
+            var segLut = [];
+            for (var i = 0; i < seg.length; i++) {
+                var latR = seg[i][1] * Const.DEG;
+                var lonR = seg[i][0] * Const.DEG;
+                var sinLat = Math.sin(latR);
+                var cosLat = Math.cos(latR);
+                var x = R * cosLat * Math.sin(lonR);
+                var y = R * (cosCLat * sinLat - sinCLat * cosLat * Math.cos(lonR));
+                var z = sinCLat * sinLat + cosCLat * cosLat * Math.cos(lonR);
+                segLut.push({ sinLat: sinLat, cosLat: cosLat, x: x, y: y, visible: z >= 0 });
+            }
+            lut.push(segLut);
+        }
+        return lut;
+    }
+
+    function _buildScreenLut(cx, cy, R, cLatR) {
+        var sinCLat = Math.sin(cLatR);
+        var cosCLat = Math.cos(cLatR);
+        var yMin = Math.floor(cy - R);
+        var yMax = Math.ceil(cy + R);
+        var table = [];
+        for (var py = yMin; py <= yMax; py++) {
+            var dy = py - cy;
+            var maxDx = Math.sqrt(R * R - dy * dy);
+            var yn = -dy / R;
+            var yn2 = yn * yn;
+            var rho0 = Math.abs(yn);
+            var c = rho0 < 1e-10 ? 0 : Math.asin(rho0);
+            var cosC0 = Math.cos(c);
+            var sinC0 = Math.sin(c);
+            var latR = Math.asin(cosC0 * sinCLat + yn * sinC0 * cosCLat);
+            table.push({
+                py: py,
+                yn: yn,
+                latR: latR,
+                sinLatR: Math.sin(latR),
+                cosLatR: Math.cos(latR),
+                maxDx: maxDx,
+                yn2: yn2,
+                // Pre-computed for inverse projection: dLonR = atan2(xn * rho, rho * (rho * a - yn * b))
+                // where a = cosCLat * sqrt(1-rho²), b = sinCLat * rho ... still per-pixel
+                // Instead store: a = cosCLat, b = yn * sinCLat for use in per-pixel formula
+                cosCLat: cosCLat,
+                sinCLat: sinCLat
+            });
+        }
+        return table;
+    }
+
+    function _buildLuts(R, cx, cy) {
+        var cLatR = globe.centerLatitude * Const.DEG;
+        _geomLut = {
+            coast: _buildGeomLut(Coast.segments, R, cx, cy, cLatR),
+            borders: _buildGeomLut(Borders.segments, R, cx, cy, cLatR)
+        };
+        _screenLut = _buildScreenLut(cx, cy, R, cLatR);
+        _lutCenterLat = globe.centerLatitude;
+    }
+
+    function _drawSegmentsFast(ctx, lut, lineWidth, strokeStyle, cLonR) {
+        ctx.strokeStyle = strokeStyle;
+        ctx.lineWidth = lineWidth;
+        ctx.lineJoin = Const.COASTLINE_LINE_JOIN;
+        var cosCLon = Math.cos(-cLonR);
+        var sinCLon = Math.sin(-cLonR);
+        var cx = globe._cx;
+        var cy = globe._cy;
+        for (var s = 0; s < lut.length; s++) {
+            var seg = lut[s];
+            var started = false;
+            ctx.beginPath();
+            for (var i = 0; i < seg.length; i++) {
+                var pt = seg[i];
+                if (pt.visible) {
+                    var sx = cx + pt.x * cosCLon - pt.y * sinCLon;
+                    var sy = cy - pt.x * sinCLon - pt.y * cosCLon;
+                    if (!started) { ctx.moveTo(sx, sy); started = true; }
+                    else ctx.lineTo(sx, sy);
+                } else {
+                    if (started) { ctx.stroke(); ctx.beginPath(); started = false; }
+                }
+            }
+            if (started) ctx.stroke();
+        }
+    }
+
+    function _drawNightSideFast(ctx, screenLut, cLonR, R, cx, cy) {
+        var now = new Date();
+        var ss = Solar.subsolarPoint(now);
+        var ssLatR = ss.lat * Const.DEG;
+        var ssLonR = ss.lon * Const.DEG;
+        var sunSinLat = Math.sin(ssLatR);
+        var sunCosLat = Math.cos(ssLatR);
+        var sunCosLon = Math.cos(ssLonR);
+        var sunSinLon = Math.sin(ssLonR);
+        var step = Const.NIGHT_SCANLINE_STEP;
+        ctx.fillStyle = Qt.rgba(0, 0, 0, Const.NIGHT_OPACITY);
+        for (var row = 0; row < screenLut.length; row++) {
+            var r = screenLut[row];
+            if (r.maxDx < 1) continue;
+            var sinLat = r.sinLatR;
+            var cosLat = r.cosLatR;
+            var cosLatSun = sunCosLat * cosLat;
+            var sinLatSun = sunSinLat * sinLat;
+            var ynB = r.yn * r.sinCLat;  // yn * sinCLat
+            for (var px = Math.floor(cx - r.maxDx); px <= Math.ceil(cx + r.maxDx); px += step) {
+                var xn = (px - cx) / R;
+                var rho2 = xn * xn + r.yn2;
+                // Inverse projection: dLonR = atan2(xn, cosCLat * sqrt(1-rho²) - yn * sinCLat)
+                var dLonR = Math.atan2(xn, r.cosCLat * Math.sqrt(1 - rho2) - ynB);
+                var lonR = cLonR + dLonR;
+                var cosA = sinLatSun + cosLatSun * (sunCosLon * Math.cos(lonR) + sunSinLon * Math.sin(lonR));
+                if (cosA < 0) ctx.fillRect(px, r.py, step, step);
+            }
+        }
     }
 
     function flyTo(lat, lon) {
@@ -67,7 +209,12 @@ Item {
         var cur = centerLongitude;
         spinAnim.from = cur;
         spinAnim.to = cur + 360;
+        if (!_fastMode || _lutCenterLat !== centerLatitude) {
+            _buildLuts(_radius, _cx, _cy);
+        }
+        _fastMode = true;
         spinAnim.start();
+        spinTimer.start();
     }
 
     property real _radius: Math.min(canvas.width, canvas.height) / 2 - Const.GLOBE_MARGIN
@@ -288,18 +435,32 @@ Item {
             ctx.arc(cx, cy, R, 0, Math.PI * 2);
             ctx.clip();
 
-            _drawNightSide(ctx, cx, cy, R, cLat, cLon);
-            _drawSegments(ctx, Coast.segments, cLat, cLon, R, cx, cy,
-                          Const.COASTLINE_LINE_WIDTH, Theme.highlightColor);
-            _drawSegments(ctx, Borders.segments, cLat, cLon, R, cx, cy,
-                          Const.BORDER_LINE_WIDTH,
-                          Qt.rgba(Theme.secondaryHighlightColor.r,
-                                  Theme.secondaryHighlightColor.g,
-                                  Theme.secondaryHighlightColor.b,
-                                  Const.BORDER_ALPHA));
+            if (globe._fastMode && _geomLut && _lutCenterLat === cLat) {
+                var cLonR = cLon * Const.DEG;
+                _drawNightSideFast(ctx, _screenLut, cLonR, R, cx, cy);
+                _drawSegmentsFast(ctx, _geomLut.coast, Const.COASTLINE_LINE_WIDTH, Theme.highlightColor, cLonR);
+                _drawSegmentsFast(ctx, _geomLut.borders, Const.BORDER_LINE_WIDTH,
+                    Qt.rgba(Theme.secondaryHighlightColor.r,
+                            Theme.secondaryHighlightColor.g,
+                            Theme.secondaryHighlightColor.b,
+                            Const.BORDER_ALPHA), cLonR);
+                var ss = Solar.subsolarPoint(new Date());
+                _drawSun(ctx, Proj.project(ss.lat, ss.lon, cLat, cLon, R, cx, cy));
+            } else {
+                _fastMode = false;
+                _drawNightSide(ctx, cx, cy, R, cLat, cLon);
+                _drawSegments(ctx, Coast.segments, cLat, cLon, R, cx, cy,
+                              Const.COASTLINE_LINE_WIDTH, Theme.highlightColor);
+                _drawSegments(ctx, Borders.segments, cLat, cLon, R, cx, cy,
+                              Const.BORDER_LINE_WIDTH,
+                              Qt.rgba(Theme.secondaryHighlightColor.r,
+                                      Theme.secondaryHighlightColor.g,
+                                      Theme.secondaryHighlightColor.b,
+                                      Const.BORDER_ALPHA));
+                var ss = Solar.subsolarPoint(new Date());
+                _drawSun(ctx, Proj.project(ss.lat, ss.lon, cLat, cLon, R, cx, cy));
+            }
 
-            var ss = Solar.subsolarPoint(new Date());
-            _drawSun(ctx, Proj.project(ss.lat, ss.lon, cLat, cLon, R, cx, cy));
             _drawLocationMarkers(ctx, globe.locations, cLat, cLon, R, cx, cy);
             _drawSelectedPin(ctx, cLat, cLon, R, cx, cy);
 
@@ -315,8 +476,13 @@ Item {
         }
 
         on_TickChanged: requestPaint()
-        on_LonChanged: requestPaint()
-        on_LatChanged: requestPaint()
+        on_LonChanged: { if (!globe._fastMode) requestPaint(); }
+        on_LatChanged: {
+            if (globe._fastMode) {
+                _buildLuts(globe._radius, globe._cx, globe._cy);
+            }
+            requestPaint();
+        }
         on_SelLonChanged: requestPaint()
     }
 
@@ -337,6 +503,8 @@ Item {
                 return;
             }
             spinAnim.stop();
+            spinTimer.stop();
+            globe._fastMode = false;
             flyAnim.stop();
             _lastX = mouse.x;
             _lastY = mouse.y;
