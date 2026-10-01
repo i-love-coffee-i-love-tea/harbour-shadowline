@@ -2,15 +2,12 @@
 
 An interactive globe for Sailfish OS showing real-time day/night shading and sunrise/sunset times.
 
-![Globe with day/night terminator](screenshots/Screenshot_20261001_212629_001.png)
-![Location list with sunrise/sunset times](screenshots/Screenshot_20261001_212653_001.png)
-![Globe focused on Europe](screenshots/Screenshot_20261001_214253_001.png)
-![Globe focused on Asia](screenshots/Screenshot_20261001_214311_001.png)
-![Globe showing the Americas](screenshots/Screenshot_20261001_214319_001.png)
-![Detailed location view](screenshots/Screenshot_20261001_223818_001.png)
-![Full globe view](screenshots/Screenshot_20261001_224228_001.png)
-![Location picker](screenshots/Screenshot_20261002_000355_001.png)
-![Cover page](screenshots/Screenshot_20261002_000405_001.png)
+<p align="center">
+<img src="screenshots/Screenshot_20261001_212629_001.png" width="24%">
+<img src="screenshots/Screenshot_20261001_214253_001.png" width="24%">
+<img src="screenshots/Screenshot_20261002_000355_001.png" width="24%">
+<img src="screenshots/Screenshot_20261002_000405_001.png" width="24%">
+</p>
 
 ## Features
 
@@ -22,14 +19,6 @@ An interactive globe for Sailfish OS showing real-time day/night shading and sun
 - Cover page shows a mini globe with a countdown to the next sunrise or sunset for a pinned location
 - Polar day and polar night detection
 - Solar calculations based on the NOAA Solar Calculator algorithm (±1 minute accuracy)
-
-## Building
-
-Requires the Sailfish SDK. From the SDK build engine:
-
-```bash
-mb2 build
-```
 
 ## License
 
