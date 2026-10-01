@@ -17,6 +17,7 @@ Item {
     property real selectedLon: NaN
     property bool hasSelection: !isNaN(selectedLat) && !isNaN(selectedLon)
     property bool isSpinning: spinAnim.running
+    property bool _isDragging: false
     property real _spinFrom: 0
     property real spinProgress: isSpinning ? ((centerLongitude - _spinFrom) / 360 % 1 + 1) % 1 : 0
 
@@ -285,14 +286,14 @@ Item {
             return { lat: lat, lon: lon };
         }
 
-        function _drawNightSide(ctx, cx, cy, R, cLat, cLon) {
+        function _drawNightSide(ctx, cx, cy, R, cLat, cLon, step) {
             var cLatR = cLat * Const.DEG;
             var cLonR = cLon * Const.DEG;
             var now = new Date();
             var ss = Solar.subsolarPoint(now);
             var ssLatR = ss.lat * Const.DEG;
             var ssLonR = ss.lon * Const.DEG;
-            var step = Const.NIGHT_SCANLINE_STEP;
+            step = step || Const.NIGHT_SCANLINE_STEP;
             ctx.fillStyle = Qt.rgba(0, 0, 0, Const.NIGHT_OPACITY);
 
             for (var py = Math.floor(cy - R); py <= Math.ceil(cy + R); py += step) {
@@ -457,10 +458,12 @@ Item {
             ctx.arc(cx, cy, R, 0, Math.PI * 2);
             ctx.clip();
 
+            var nightStep = (globe._fastMode || globe._isDragging) ? Const.NIGHT_SCANLINE_STEP : 1;
+
             if (globe._fastMode && _geomLut && _lutCenterLat === cLat) {
                 var cLonR = cLon * Const.DEG;
                 var cLatR = cLat * Const.DEG;
-                _drawNightSide(ctx, cx, cy, R, cLat, cLon);
+                _drawNightSide(ctx, cx, cy, R, cLat, cLon, nightStep);
                 _drawSegmentsFast(ctx, _geomLut.coast, Const.COASTLINE_LINE_WIDTH, Theme.highlightColor, cLonR, cLatR);
                 _drawSegmentsFast(ctx, _geomLut.borders, Const.BORDER_LINE_WIDTH,
                     Qt.rgba(Theme.secondaryHighlightColor.r,
@@ -471,7 +474,7 @@ Item {
                 _drawSun(ctx, Proj.project(ss.lat, ss.lon, cLat, cLon, R, cx, cy));
             } else {
                 _fastMode = false;
-                _drawNightSide(ctx, cx, cy, R, cLat, cLon);
+                _drawNightSide(ctx, cx, cy, R, cLat, cLon, nightStep);
                 _drawSegments(ctx, Coast.segments, cLat, cLon, R, cx, cy,
                               Const.COASTLINE_LINE_WIDTH, Theme.highlightColor);
                 _drawSegments(ctx, Borders.segments, cLat, cLon, R, cx, cy,
@@ -525,6 +528,7 @@ Item {
                 mouse.accepted = false;
                 return;
             }
+            globe._isDragging = true;
             spinAnim.stop();
             spinTimer.stop();
             globe._fastMode = false;
@@ -546,8 +550,8 @@ Item {
             _lastX = mouse.x;
             _lastY = mouse.y;
         }
-        onReleased: _dragging = false
-        onCanceled: _dragging = false
+        onReleased: { _dragging = false; globe._isDragging = false; }
+        onCanceled: { _dragging = false; globe._isDragging = false; }
     }
 
     function repaint() { canvas.requestPaint(); }
