@@ -22,11 +22,11 @@ CoverBackground {
         id: coverGlobe
         anchors {
             top: parent.top
-            topMargin: Theme.paddingSmall
+            topMargin: Theme.horizontalPageMargin
             left: parent.left
-            leftMargin: Theme.paddingSmall
+            leftMargin: Theme.horizontalPageMargin
             right: parent.right
-            rightMargin: Theme.paddingSmall
+            rightMargin: Theme.horizontalPageMargin
         }
         height: width
         z: 0
