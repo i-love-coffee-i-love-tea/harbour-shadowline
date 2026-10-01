@@ -461,7 +461,7 @@ Item {
             ctx.arc(cx, cy, R, 0, Math.PI * 2);
             ctx.clip();
 
-            var nightStep = (globe._fastMode || globe._isDragging || !globe._needsHighAccuracy) ? Const.NIGHT_SCANLINE_STEP : 1;
+            var nightStep = (globe._fastMode || globe._isDragging || !globe._needsHighAccuracy) ? Const.NIGHT_SCANLINE_STEP : 2;
 
             if (globe._fastMode && _geomLut && _lutCenterLat === cLat) {
                 var cLonR = cLon * Const.DEG;
