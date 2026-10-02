@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
-"""Generate half-dark Earth app icons for harbour-shadowline.
+"""Generate Earth app icons for harbour-shadowline matching the in-app globe centered on Gaza.
 
-Uses real Natural Earth coastline data (ne_110m_land.geojson) to render
-accurate land masses on a sphere with a day/night terminator.
+Uses vector coastline and border geometry from src/geomdata.h to render
+the interactive globe with realistic solar shading, twilight scattering, and atmosphere rim.
 
-Input:  tools/ne_land.geojson  (or tools/land_mask.png if already rasterized)
 Output: rpm/icons/{86x86,108x108,128x128,172x172}/harbour-shadowline.png
 
 Usage:
@@ -12,166 +11,214 @@ Usage:
 """
 import math
 import os
-import json
+import re
 
 from PIL import Image, ImageDraw, ImageFilter
 
 SIZES = [86, 108, 128, 172]
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECT_DIR = os.path.dirname(SCRIPT_DIR)
+GEOMDATA_PATH = os.path.join(PROJECT_DIR, "src/geomdata.h")
 OUTPUT_DIR = os.path.join(PROJECT_DIR, "rpm/icons/{size}x{size}/harbour-shadowline.png")
-GEOJSON_PATH = os.path.join(SCRIPT_DIR, "ne_land.geojson")
-LAND_MASK_PATH = os.path.join(SCRIPT_DIR, "land_mask.png")
-LAND_MASK_SIZE = (4096, 2048)
+
+GAZA_LAT = 31.5017
+GAZA_LON = 34.4668
 
 
-def build_land_mask(force=False):
-    """Rasterize GeoJSON coastlines into a grayscale land mask image."""
-    if not force and os.path.exists(LAND_MASK_PATH):
-        mask = Image.open(LAND_MASK_PATH).convert("L")
-        if mask.size == LAND_MASK_SIZE:
-            print(f"Reusing existing land mask: {LAND_MASK_PATH}")
-            return mask
+def load_geomdata():
+    with open(GEOMDATA_PATH, "r") as f:
+        text = f.read()
 
-    print(f"Rasterizing land mask from {GEOJSON_PATH} ...")
-    with open(GEOJSON_PATH) as f:
-        data = json.load(f)
+    def parse_float_array(name):
+        m = re.search(r'const float ' + name + r'\[\]\s*=\s*\{([^}]+)\};', text)
+        return [float(x.strip()) for x in m.group(1).split(',') if x.strip()]
 
-    W, H = LAND_MASK_SIZE
-    mask = Image.new("L", (W, H), 0)
-    draw = ImageDraw.Draw(mask)
+    def parse_int_array(name):
+        m = re.search(r'const int ' + name + r'\[\]\s*=\s*\{([^}]+)\};', text)
+        return [int(x.strip()) for x in m.group(1).split(',') if x.strip()]
 
-    def lonlat_to_px(lon, lat):
-        return (int((lon + 180) / 360 * W), int((90 - lat) / 180 * H))
-
-    for feat in data["features"]:
-        geom = feat["geometry"]
-        if geom["type"] == "Polygon":
-            rings = geom["coordinates"]
-        elif geom["type"] == "MultiPolygon":
-            rings = [ring for poly in geom["coordinates"] for ring in poly]
-        else:
-            continue
-        for ring in rings:
-            pts = [lonlat_to_px(lon, lat) for lon, lat in ring]
-            if len(pts) >= 3:
-                try:
-                    draw.polygon(pts, fill=255)
-                except Exception:
-                    pass
-
-    mask.save(LAND_MASK_PATH)
-    print(f"Saved land mask: {LAND_MASK_PATH} ({W}x{H})")
-    return mask
+    coast_data = parse_float_array('COAST_DATA')
+    coast_offsets = parse_int_array('COAST_OFFSETS')
+    border_data = parse_float_array('BORDER_DATA')
+    border_offsets = parse_int_array('BORDER_OFFSETS')
+    return coast_data, coast_offsets, border_data, border_offsets
 
 
-def is_land(lat_deg, lon_deg, mask, mask_pixels):
-    u = int((lon_deg + 180) / 360 * mask.width) % mask.width
-    v = max(0, min(mask.height - 1, int((90 - lat_deg) / 180 * mask.height)))
-    return mask_pixels[u, v] > 128
+def render_gaza_globe(size, coast_data, coast_offsets, border_data, border_offsets,
+                      sun_lon_offset=-40.0, sun_lat=5.0):
+    scale = 4
+    s = size * scale
+    cx = s / 2.0
+    cy = s / 2.0
+    R = s * 0.45
 
+    cLat = GAZA_LAT * math.pi / 180.0
+    cLon = GAZA_LON * math.pi / 180.0
 
-def render_icon(size, mask, mask_pixels):
-    """Render a half-dark Earth icon at the given pixel size."""
-    s = size * 4  # 4x supersample
+    sunLat = sun_lat * math.pi / 180.0
+    sunLon = (GAZA_LON + sun_lon_offset) * math.pi / 180.0
+
+    sc = (36 / 255.0, 195 / 255.0, 181 / 255.0)
+
     img = Image.new("RGBA", (s, s), (0, 0, 0, 0))
-    px = img.load()
-    cx, cy = s / 2.0, s / 2.0
-    R = s * 0.46
-    rot = 15.0
+    pixels = img.load()
 
-    # Sun direction (from upper-right)
-    sun_dx, sun_dy = 0.8, -0.2
-    sun_len = math.sqrt(sun_dx ** 2 + sun_dy ** 2)
-    sun_dx /= sun_len
-    sun_dy /= sun_len
-
-    for x in range(s):
-        for y in range(s):
-            dx, dy = x - cx, y - cy
-            if dx * dx + dy * dy > R * R:
+    for y in range(s):
+        for x in range(s):
+            dx = x - cx
+            dy = y - cy
+            r = math.hypot(dx, dy)
+            if r > R:
                 continue
-            nx, ny = dx / R, dy / R
-            nz = math.sqrt(max(0, 1 - nx * nx - ny * ny))
+            edge_alpha = min(1.0, max(0.0, R - r))
+            xn = dx / R
+            yn = dy / R
+            z = math.sqrt(max(0.0, 1.0 - xn * xn - yn * yn))
+            yn_gl = -yn
 
-            lat = math.degrees(math.asin(max(-1, min(1, -ny))))
-            lon = math.degrees(math.atan2(nx, nz)) + rot
-            lon = ((lon + 180) % 360) - 180
+            sinLat = yn_gl * math.cos(cLat) + z * math.sin(cLat)
+            cosLat = math.sqrt(max(0.0, 1.0 - sinLat * sinLat))
+            lon = cLon + math.atan2(xn, z * math.cos(cLat) - yn_gl * math.sin(cLat))
+            cosA = math.sin(sunLat) * sinLat + math.cos(sunLat) * cosLat * math.cos(lon - sunLon)
 
-            land = is_land(lat, lon, mask, mask_pixels)
+            nightOcean = [0.035 + sc[0] * 0.04, 0.065 + sc[1] * 0.04, 0.10 + sc[2] * 0.04]
+            dayOcean = [0.05 + sc[0] * 0.14, 0.08 + sc[1] * 0.14, 0.12 + sc[2] * 0.14]
 
-            sun_dz = math.sqrt(max(0, 1 - sun_dx ** 2 - sun_dy ** 2))
-            sun_dot = nx * sun_dx + ny * sun_dy + nz * sun_dz
+            dayT = max(0.0, min(1.0, (cosA - (-0.16)) / (0.08 - (-0.16))))
+            dayT = dayT * dayT * (3.0 - 2.0 * dayT)
 
-            # Smooth day/night transition (no hard line)
-            day = max(0, min(1, (sun_dot + 0.15) / 0.30))
+            col = [nightOcean[i] + (dayOcean[i] - nightOcean[i]) * dayT for i in range(3)]
 
-            # Day side colors
-            if land:
-                dr, dg, db = 60, 180, 70
-            else:
-                dr, dg, db = 35, 120, 240
+            if cosA > 0.0:
+                sunDiff = (cosA ** 0.80) * 0.22
+                col[0] += sunDiff * 0.85
+                col[1] += sunDiff * 0.95
+                col[2] += sunDiff * 0.98
 
-            # Night side colors
-            if land:
-                nr, ng, nb = 38, 72, 38
-            else:
-                nr, ng, nb = 25, 42, 85
+            twilight = math.exp(-((cosA + 0.02) / 0.09) ** 2) * 0.08
+            col[0] += twilight * 0.20
+            col[1] += twilight * 0.50
+            col[2] += twilight * 0.80
 
-            # Blend
-            r = int(dr * day + nr * (1 - day))
-            g = int(dg * day + ng * (1 - day))
-            b = int(db * day + nb * (1 - day))
+            rim = 1.0 - z
+            atmo = (rim ** 2.8) * 0.38
+            atmoSun = max(0.18, min(1.0, (cosA + 0.20) / 0.50))
+            col[0] += sc[0] * atmo * atmoSun
+            col[1] += sc[1] * atmo * atmoSun
+            col[2] += sc[2] * atmo * atmoSun
 
-            # Atmosphere rim
-            if nz > 0.93:
-                rim = (nz - 0.93) / 0.07
-                if sun_dot > 0:
-                    r = min(255, r + int(100 * rim * sun_dot))
-                    g = min(255, g + int(160 * rim * sun_dot))
-                    b = min(255, b + int(255 * rim * sun_dot))
+            r_c = int(min(255, max(0, col[0] * 255)))
+            g_c = int(min(255, max(0, col[1] * 255)))
+            b_c = int(min(255, max(0, col[2] * 255)))
+            a_c = int(edge_alpha * 255)
+            pixels[x, y] = (r_c, g_c, b_c, a_c)
+
+    draw = ImageDraw.Draw(img)
+
+    def proj(glon_deg, glat_deg):
+        geo_lon = glon_deg * math.pi / 180.0
+        geo_lat = glat_deg * math.pi / 180.0
+        sinCLat = math.sin(cLat)
+        cosCLat = math.cos(cLat)
+        sinLat = math.sin(geo_lat)
+        cosLat = math.cos(geo_lat)
+        dLon = geo_lon - cLon
+        x = R * cosLat * math.sin(dLon)
+        y = R * (cosCLat * sinLat - sinCLat * cosLat * math.cos(dLon))
+        z = sinCLat * sinLat + cosCLat * cosLat * math.cos(dLon)
+        cosA = math.sin(sunLat) * sinLat + math.cos(sunLat) * cosLat * math.cos(geo_lon - sunLon)
+        return (cx + x, cy - y, z, cosA)
+
+    def draw_vector_layer(data, offsets, is_coast):
+        for s_idx in range(len(offsets) - 1):
+            start = offsets[s_idx]
+            count = offsets[s_idx + 1] - start
+            if count < 2:
+                continue
+
+            pts = []
+            for i in range(count):
+                glon = data[(start + i) * 2]
+                glat = data[(start + i) * 2 + 1]
+                pts.append(proj(glon, glat))
+
+            for i in range(len(pts) - 1):
+                p1, p2 = pts[i], pts[i + 1]
+                if p1[2] < 0.0 and p2[2] < 0.0:
+                    continue
+                cosA_avg = (p1[3] + p2[3]) * 0.5
+                dayFactor = max(0.0, min(1.0, (cosA_avg + 0.10) / 0.18))
+                if dayFactor > 0.05:
+                    halo_a = int(215 * dayFactor)
+                    hw = int(scale * (2.4 if is_coast else 1.6))
+                    draw.line([(p1[0], p1[1]), (p2[0], p2[1])], fill=(0, 8, 14, halo_a), width=hw)
+
+        for s_idx in range(len(offsets) - 1):
+            start = offsets[s_idx]
+            count = offsets[s_idx + 1] - start
+            if count < 2:
+                continue
+
+            pts = []
+            for i in range(count):
+                glon = data[(start + i) * 2]
+                glat = data[(start + i) * 2 + 1]
+                pts.append(proj(glon, glat))
+
+            for i in range(len(pts) - 1):
+                p1, p2 = pts[i], pts[i + 1]
+                if p1[2] < 0.0 and p2[2] < 0.0:
+                    continue
+                cosA_avg = (p1[3] + p2[3]) * 0.5
+                dayFactor = max(0.0, min(1.0, (cosA_avg + 0.08) / 0.16))
+
+                if is_coast:
+                    alpha = 255
+                    lw = max(1, int(scale * 1.3))
+                    draw.line([(p1[0], p1[1]), (p2[0], p2[1])], fill=(36, 195, 181, alpha), width=lw)
                 else:
-                    r = min(255, r + int(25 * rim))
-                    g = min(255, g + int(45 * rim))
-                    b = min(255, b + int(100 * rim))
+                    base_a = 0.55
+                    alpha = int(255 * (base_a + (0.85 - base_a) * dayFactor))
+                    lw = max(1, int(scale * 0.9))
+                    draw.line([(p1[0], p1[1]), (p2[0], p2[1])], fill=(36, 195, 181, alpha), width=lw)
 
-            px[x, y] = (max(0, min(255, r)), max(0, min(255, g)), max(0, min(255, b)), 255)
+    draw_vector_layer(border_data, border_offsets, False)
+    draw_vector_layer(coast_data, coast_offsets, True)
 
-    # Downscale with high-quality resampling
-    img = img.resize((size, size), Image.LANCZOS)
+    rw = max(1, int(scale * 1.4))
+    draw.ellipse([cx - R, cy - R, cx + R, cy + R], outline=(36, 195, 181, 150), width=rw)
 
-    # Outer atmosphere glow
+    final_img = img.resize((size, size), Image.LANCZOS)
+
     glow = Image.new("RGBA", (size, size), (0, 0, 0, 0))
     gd = ImageDraw.Draw(glow)
-    cx2, cy2 = size / 2.0, size / 2.0
-    R2 = size * 0.46
-    for i in range(5):
-        ri = R2 + i * size * 0.016
-        a = max(0, int(50 - i * 12))
-        gd.ellipse(
-            [cx2 - ri, cy2 - ri, cx2 + ri, cy2 + ri],
-            outline=(60, 140, 255, a),
-            width=max(1, int(size * 0.01)),
-        )
+    R_icon = size * 0.45
+    for i in range(4):
+        ri = R_icon + i * (size * 0.012)
+        a = max(0, int(45 - i * 11))
+        gd.ellipse([size / 2 - ri, size / 2 - ri, size / 2 + ri, size / 2 + ri],
+                   outline=(36, 195, 181, a), width=max(1, int(size * 0.01)))
     glow = glow.filter(ImageFilter.GaussianBlur(radius=max(1, size * 0.02)))
 
     result = Image.new("RGBA", (size, size), (0, 0, 0, 0))
     result = Image.alpha_composite(result, glow)
-    result = Image.alpha_composite(result, img)
+    result = Image.alpha_composite(result, final_img)
     return result
 
 
 def main():
-    mask = build_land_mask()
-    mask_pixels = mask.load()
+    print("Loading vector data from src/geomdata.h ...")
+    coast_data, coast_offsets, border_data, border_offsets = load_geomdata()
 
     for size in SIZES:
         out = OUTPUT_DIR.format(size=size)
-        print(f"Rendering {size}x{size} ...")
-        render_icon(size, mask, mask_pixels).save(out, "PNG")
+        print(f"Rendering {size}x{size} centered on Gaza ...")
+        icon = render_gaza_globe(size, coast_data, coast_offsets, border_data, border_offsets)
+        os.makedirs(os.path.dirname(out), exist_ok=True)
+        icon.save(out, "PNG")
         print(f"  -> {out}")
 
-    print("All icons generated.")
+    print("All icons generated successfully.")
 
 
 if __name__ == "__main__":

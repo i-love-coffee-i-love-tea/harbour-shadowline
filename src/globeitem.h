@@ -70,7 +70,7 @@ private:
     void renderGlobe(int w, int h);
     void drawGlobe(int w, int h);
     void drawLines(QOpenGLBuffer &vbo, int *offsets, int segCount,
-                   const QColor &color, float lineWidth, int w, int h);
+                   const QColor &color, float lineWidth, int w, int h, bool isHalo = false);
     void drawRing(int w, int h);
     void updateSunPosition();
 

@@ -42,29 +42,30 @@ static const char *GLOBE_FRAG =
     "    float cosA = sin(u_sunLatR) * sinLat + cos(u_sunLatR) * cosLat * cos(lon - u_sunLonR);\n"
     "\n"
     "    vec3 sc = u_sunColor.rgb;\n"
-    "    vec3 nightOcean = vec3(0.03, 0.05, 0.08) + sc * 0.04;\n"
-    "    if (u_nightColor.a > 0.0) {\n"
-    "        nightOcean = mix(nightOcean, u_nightColor.rgb, u_nightColor.a);\n"
-    "    }\n"
-    "    vec3 dayOcean = vec3(0.08, 0.12, 0.16) + sc * 0.22;\n"
+    "    vec3 nightOcean = vec3(0.035, 0.065, 0.10) + sc * 0.04;\n"
     "    if (u_oceanColor.a > 0.0) {\n"
-    "        dayOcean = mix(dayOcean, u_oceanColor.rgb, 0.35);\n"
+    "        nightOcean = mix(nightOcean, u_oceanColor.rgb, 0.40);\n"
+    "    }\n"
+    "    vec3 dayOcean = vec3(0.05, 0.08, 0.12) + sc * 0.14;\n"
+    "    if (u_oceanColor.a > 0.0) {\n"
+    "        dayOcean = mix(dayOcean, u_oceanColor.rgb, 0.25);\n"
     "    }\n"
     "\n"
-    "    float dayT = clamp((cosA + 0.08) / 0.16, 0.0, 1.0);\n"
+    "    float dayT = smoothstep(-0.16, 0.08, cosA);\n"
     "    vec3 col = mix(nightOcean, dayOcean, dayT);\n"
     "\n"
     "    if (cosA > 0.0) {\n"
-    "        float sunDiff = pow(cosA, 0.70) * 0.28;\n"
-    "        col += vec3(sunDiff * 0.95, sunDiff * 1.0, sunDiff * 0.92);\n"
+    "        float sunDiff = pow(cosA, 0.80) * 0.22;\n"
+    "        col += vec3(sunDiff * 0.85, sunDiff * 0.95, sunDiff * 0.98);\n"
     "    }\n"
     "\n"
-    "    float twilight = exp(-pow(cosA / 0.07, 2.0)) * 0.10;\n"
-    "    col += vec3(twilight * 1.0, twilight * 0.55, twilight * 0.15);\n"
+    "    float twilight = exp(-pow((cosA + 0.02) / 0.09, 2.0)) * 0.08;\n"
+    "    col += vec3(twilight * 0.20, twilight * 0.50, twilight * 0.80);\n"
     "\n"
     "    float rim = 1.0 - z;\n"
-    "    float atmo = pow(rim, 3.0) * 0.35;\n"
-    "    col += sc * atmo;\n"
+    "    float atmo = pow(rim, 2.8) * 0.38;\n"
+    "    float atmoSun = clamp((cosA + 0.20) / 0.50, 0.18, 1.0);\n"
+    "    col += sc * (atmo * atmoSun);\n"
     "\n"
     "    gl_FragColor = vec4(col, edgeAlpha);\n"
     "}\n";
@@ -105,15 +106,19 @@ static const char *LINE_FRAG =
     "precision mediump float;\n"
     "#endif\n"
     "uniform vec4 u_color;\n"
+    "uniform float u_isHalo;\n"
     "varying float v_z;\n"
     "varying float v_cosA;\n"
     "void main() {\n"
     "    if (v_z < 0.0) discard;\n"
-    "    float dayFactor = clamp((v_cosA + 0.06) / 0.14, 0.0, 1.0);\n"
-    "    vec3 dayColor = vec3(0.01, 0.03, 0.05);\n"
-    "    vec3 rgb = mix(u_color.rgb, dayColor, dayFactor);\n"
-    "    float alpha = mix(u_color.a, 1.0, dayFactor);\n"
-    "    gl_FragColor = vec4(rgb, alpha);\n"
+    "    if (u_isHalo > 0.5) {\n"
+    "        float haloAlpha = u_color.a * clamp((v_cosA + 0.10) / 0.18, 0.0, 1.0);\n"
+    "        gl_FragColor = vec4(u_color.rgb, haloAlpha);\n"
+    "    } else {\n"
+    "        float dayFactor = clamp((v_cosA + 0.08) / 0.16, 0.0, 1.0);\n"
+    "        float alpha = mix(u_color.a, max(u_color.a, 0.85), dayFactor);\n"
+    "        gl_FragColor = vec4(u_color.rgb, alpha);\n"
+    "    }\n"
     "}\n";
 
 static const char *RING_VERT =
@@ -315,9 +320,16 @@ void GlobeItem::renderGlobe(int w, int h) {
 
     drawGlobe(w, h);
 
+    // Dark casing halo for crisp contrast under daylight
+    QColor haloColor(0, 8, 14, 215);
+    drawLines(m_coastVbo, m_coastOffsets, m_coastSegCount, haloColor, 2.6f, w, h, true);
+    drawLines(m_borderVbo, m_borderOffsets, m_borderSegCount, haloColor, 1.8f, w, h, true);
+
+    // Primary lines (uniform color on both light and dark sides)
     m_coastColor.setAlphaF(1.0);
-    drawLines(m_coastVbo, m_coastOffsets, m_coastSegCount, m_coastColor, 1.4f, w, h);
-    drawLines(m_borderVbo, m_borderOffsets, m_borderSegCount, m_borderColor, 1.1f, w, h);
+    drawLines(m_coastVbo, m_coastOffsets, m_coastSegCount, m_coastColor, 1.4f, w, h, false);
+    drawLines(m_borderVbo, m_borderOffsets, m_borderSegCount, m_borderColor, 1.0f, w, h, false);
+
     drawRing(w, h);
 
     m_fbo->release();
@@ -350,7 +362,7 @@ void GlobeItem::drawGlobe(int w, int h) {
 }
 
 void GlobeItem::drawLines(QOpenGLBuffer &vbo, int *offsets, int segCount,
-                           const QColor &color, float lw, int w, int h) {
+                          const QColor &color, float lw, int w, int h, bool isHalo) {
     m_lineProg->bind(); vbo.bind();
     int loc = m_lineProg->attributeLocation("a_geo");
     m_lineProg->enableAttributeArray(loc);
@@ -364,17 +376,39 @@ void GlobeItem::drawLines(QOpenGLBuffer &vbo, int *offsets, int segCount,
     m_lineProg->setUniformValue("u_cx_cy", cx, cy);
     m_lineProg->setUniformValueArray("u_resolution", res, 1, 2);
     m_lineProg->setUniformValue("u_color", float(color.redF()), float(color.greenF()), float(color.blueF()), float(color.alphaF()));
+    m_lineProg->setUniformValue("u_isHalo", isHalo ? 1.0f : 0.0f);
     glLineWidth(lw);
 
-    static const float offsetsX[] = { 0.0f, 0.7f, -0.7f, 0.0f,  0.0f };
-    static const float offsetsY[] = { 0.0f, 0.0f,  0.0f, 0.7f, -0.7f };
-    int passes = (lw > 1.0f) ? 5 : 1;
-
-    for (int p = 0; p < passes; p++) {
-        m_lineProg->setUniformValue("u_offset", offsetsX[p], offsetsY[p]);
-        for (int s = 0; s < segCount; s++) {
-            int start = offsets[s], count = offsets[s+1] - start;
-            if (count >= 2) glDrawArrays(GL_LINE_STRIP, start, count);
+    if (isHalo) {
+        static const float haloOffsetsX[] = {
+            -1.3f,  1.3f,  0.0f,  0.0f,
+            -0.9f,  0.9f, -0.9f,  0.9f
+        };
+        static const float haloOffsetsY[] = {
+             0.0f,  0.0f, -1.3f,  1.3f,
+            -0.9f, -0.9f,  0.9f,  0.9f
+        };
+        for (int p = 0; p < 8; p++) {
+            m_lineProg->setUniformValue("u_offset", haloOffsetsX[p], haloOffsetsY[p]);
+            for (int s = 0; s < segCount; s++) {
+                int start = offsets[s], count = offsets[s+1] - start;
+                if (count >= 2) glDrawArrays(GL_LINE_STRIP, start, count);
+            }
+        }
+    } else {
+        static const float lineOffsetsX[] = {
+             0.0f,  0.55f, -0.55f,  0.0f,   0.0f
+        };
+        static const float lineOffsetsY[] = {
+             0.0f,  0.0f,   0.0f,   0.55f, -0.55f
+        };
+        int passes = (lw > 1.0f) ? 5 : 1;
+        for (int p = 0; p < passes; p++) {
+            m_lineProg->setUniformValue("u_offset", lineOffsetsX[p], lineOffsetsY[p]);
+            for (int s = 0; s < segCount; s++) {
+                int start = offsets[s], count = offsets[s+1] - start;
+                if (count >= 2) glDrawArrays(GL_LINE_STRIP, start, count);
+            }
         }
     }
 
