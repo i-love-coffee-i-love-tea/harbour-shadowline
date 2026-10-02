@@ -54,7 +54,7 @@ Item {
         anchors.fill: parent
         centerLatitude: globe.centerLatitude
         centerLongitude: globe.centerLongitude
-        oceanColor: Qt.tint(Qt.rgba(0.04, 0.08, 0.12, 1.0), Qt.rgba(Theme.highlightColor.r, Theme.highlightColor.g, Theme.highlightColor.b, 0.15))
+        oceanColor: Qt.darker(Theme.highlightBackgroundColor, 3)
         nightColor: Qt.rgba(0, 0, 0, Const.NIGHT_OPACITY)
         coastColor: Theme.highlightColor
         sunColor: Theme.highlightColor

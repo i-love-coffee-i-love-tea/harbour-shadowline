@@ -81,31 +81,13 @@ def render_gaza_globe(size, coast_data, coast_offsets, border_data, border_offse
             lon = cLon + math.atan2(xn, z * math.cos(cLat) - yn_gl * math.sin(cLat))
             cosA = math.sin(sunLat) * sinLat + math.cos(sunLat) * cosLat * math.cos(lon - sunLon)
 
-            nightOcean = [0.035 + sc[0] * 0.04, 0.065 + sc[1] * 0.04, 0.10 + sc[2] * 0.04]
-            dayOcean = [0.05 + sc[0] * 0.14, 0.08 + sc[1] * 0.14, 0.12 + sc[2] * 0.14]
+            nightOcean = [0.0, 42.0 / 255.0, 42.0 / 255.0]
+            dayOcean = [0.0, 77.0 / 255.0, 77.0 / 255.0]
 
-            dayT = max(0.0, min(1.0, (cosA - (-0.16)) / (0.08 - (-0.16))))
+            dayT = max(0.0, min(1.0, (cosA - (-0.12)) / (0.08 - (-0.12))))
             dayT = dayT * dayT * (3.0 - 2.0 * dayT)
 
             col = [nightOcean[i] + (dayOcean[i] - nightOcean[i]) * dayT for i in range(3)]
-
-            if cosA > 0.0:
-                sunDiff = (cosA ** 0.80) * 0.22
-                col[0] += sunDiff * 0.85
-                col[1] += sunDiff * 0.95
-                col[2] += sunDiff * 0.98
-
-            twilight = math.exp(-((cosA + 0.02) / 0.09) ** 2) * 0.08
-            col[0] += twilight * 0.20
-            col[1] += twilight * 0.50
-            col[2] += twilight * 0.80
-
-            rim = 1.0 - z
-            atmo = (rim ** 2.8) * 0.38
-            atmoSun = max(0.18, min(1.0, (cosA + 0.20) / 0.50))
-            col[0] += sc[0] * atmo * atmoSun
-            col[1] += sc[1] * atmo * atmoSun
-            col[2] += sc[2] * atmo * atmoSun
 
             r_c = int(min(255, max(0, col[0] * 255)))
             g_c = int(min(255, max(0, col[1] * 255)))
@@ -146,40 +128,14 @@ def render_gaza_globe(size, coast_data, coast_offsets, border_data, border_offse
                 p1, p2 = pts[i], pts[i + 1]
                 if p1[2] < 0.0 and p2[2] < 0.0:
                     continue
-                cosA_avg = (p1[3] + p2[3]) * 0.5
-                dayFactor = max(0.0, min(1.0, (cosA_avg + 0.10) / 0.18))
-                if dayFactor > 0.05:
-                    halo_a = int(215 * dayFactor)
-                    hw = int(scale * (2.4 if is_coast else 1.6))
-                    draw.line([(p1[0], p1[1]), (p2[0], p2[1])], fill=(0, 8, 14, halo_a), width=hw)
-
-        for s_idx in range(len(offsets) - 1):
-            start = offsets[s_idx]
-            count = offsets[s_idx + 1] - start
-            if count < 2:
-                continue
-
-            pts = []
-            for i in range(count):
-                glon = data[(start + i) * 2]
-                glat = data[(start + i) * 2 + 1]
-                pts.append(proj(glon, glat))
-
-            for i in range(len(pts) - 1):
-                p1, p2 = pts[i], pts[i + 1]
-                if p1[2] < 0.0 and p2[2] < 0.0:
-                    continue
-                cosA_avg = (p1[3] + p2[3]) * 0.5
-                dayFactor = max(0.0, min(1.0, (cosA_avg + 0.08) / 0.16))
 
                 if is_coast:
                     alpha = 255
-                    lw = max(1, int(scale * 1.3))
+                    lw = max(1, int(scale * 1.2))
                     draw.line([(p1[0], p1[1]), (p2[0], p2[1])], fill=(36, 195, 181, alpha), width=lw)
                 else:
-                    base_a = 0.55
-                    alpha = int(255 * (base_a + (0.85 - base_a) * dayFactor))
-                    lw = max(1, int(scale * 0.9))
+                    alpha = int(255 * 0.35)
+                    lw = max(1, int(scale * 0.8))
                     draw.line([(p1[0], p1[1]), (p2[0], p2[1])], fill=(36, 195, 181, alpha), width=lw)
 
     draw_vector_layer(border_data, border_offsets, False)
