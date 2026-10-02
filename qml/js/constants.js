@@ -15,7 +15,7 @@ var DEGREES_PER_HOUR = 15;
 
 // --- Globe rendering ---
 var GLOBE_HEIGHT_FRACTION = 0.45;
-var GLOBE_MARGIN = 4;
+var GLOBE_MARGIN = 8;
 var NIGHT_SCANLINE_STEP = 6;
 var NIGHT_OPACITY = 0.45;
 var DRAG_SENSITIVITY = 0.3;
@@ -60,8 +60,8 @@ var PIN_TIP_SPECULAR_ALPHA = 0.4;
 var PIN_ANCHOR_RADIUS = 4;
 
 // Globe ring
-var GLOBE_RING_LINE_WIDTH = 1.5;
-var GLOBE_RING_ALPHA = 0.4;
+var GLOBE_RING_LINE_WIDTH = 1.2;
+var GLOBE_RING_ALPHA = 0.35;
 
 // --- Timers (ms) ---
 var AUTO_REFRESH_INTERVAL = 60000;

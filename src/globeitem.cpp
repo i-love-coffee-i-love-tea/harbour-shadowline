@@ -30,21 +30,48 @@ static const char *GLOBE_FRAG =
     "void main() {\n"
     "    vec2 d = gl_FragCoord.xy - u_cx_cy;\n"
     "    float r = length(d);\n"
-    "    if (r > u_R) discard;\n"
+    "    float maxR = u_R + 8.0;\n"
+    "    if (r > maxR) discard;\n"
+    "\n"
+    "    float sinCLat = sin(u_cLatR), cosCLat = cos(u_cLatR);\n"
+    "    float sinSLat = sin(u_sunLatR), cosSLat = cos(u_sunLatR);\n"
+    "    float dLonSun = u_sunLonR - u_cLonR;\n"
+    "    vec2 sunDir = vec2(cosSLat * sin(dLonSun), cosCLat * sinSLat - sinCLat * cosSLat * cos(dLonSun));\n"
+    "    float sunDirLen = length(sunDir);\n"
+    "    float cosLimb = (sunDirLen > 0.001 && r > 0.001) ? dot(d / r, sunDir / sunDirLen) : 0.0;\n"
+    "    float sunScatter = smoothstep(-0.14, 0.28, cosLimb);\n"
+    "    sunScatter = sunScatter * sunScatter * (3.0 - 2.0 * sunScatter);\n"
+    "    float limbIntensity = mix(0.18, 1.0, sunScatter);\n"
+    "\n"
+    "    vec3 sc = u_sunColor.rgb;\n"
+    "    vec3 coronaCol = mix(sc, vec3(1.0), 0.20 * sunScatter);\n"
+    "\n"
+    "    if (r > u_R) {\n"
+    "        float dr = r - u_R;\n"
+    "        float glow = exp(-dr / 2.8) * (1.0 - dr / 8.0);\n"
+    "        float coronaAlpha = glow * limbIntensity * 0.55 * u_sunColor.a;\n"
+    "        gl_FragColor = vec4(coronaCol, coronaAlpha);\n"
+    "        return;\n"
+    "    }\n"
+    "\n"
     "    float edgeAlpha = smoothstep(u_R, u_R - 1.0, r);\n"
     "    float xn = d.x / u_R;\n"
     "    float yn = d.y / u_R;\n"
     "    float z = sqrt(max(0.0, 1.0 - xn * xn - yn * yn));\n"
     "\n"
-    "    float sinLat = yn * cos(u_cLatR) + z * sin(u_cLatR);\n"
+    "    float sinLat = yn * cosCLat + z * sinCLat;\n"
     "    float cosLat = sqrt(max(0.0, 1.0 - sinLat * sinLat));\n"
-    "    float lon = u_cLonR + atan(xn, z * cos(u_cLatR) - yn * sin(u_cLatR));\n"
-    "    float cosA = sin(u_sunLatR) * sinLat + cos(u_sunLatR) * cosLat * cos(lon - u_sunLonR);\n"
+    "    float lon = u_cLonR + atan(xn, z * cosCLat - yn * sinCLat);\n"
+    "    float cosA = sinSLat * sinLat + cosSLat * cosLat * cos(lon - u_sunLonR);\n"
     "\n"
     "    vec3 dayOcean = u_oceanColor.rgb;\n"
     "    vec3 nightOcean = mix(dayOcean, u_nightColor.rgb, u_nightColor.a);\n"
     "    float dayT = smoothstep(-0.12, 0.08, cosA);\n"
     "    vec3 col = mix(nightOcean, dayOcean, dayT);\n"
+    "\n"
+    "    float rim = 1.0 - z;\n"
+    "    float limbIn = pow(rim, 3.0) * 0.32 * limbIntensity;\n"
+    "    col = clamp(col + sc * limbIn, 0.0, 1.0);\n"
     "\n"
     "    gl_FragColor = vec4(col, edgeAlpha * u_oceanColor.a);\n"
     "}\n";
@@ -88,34 +115,28 @@ static const char *LINE_FRAG =
     "}\n";
 
 static const char *RING_VERT =
+    "#ifdef GL_ES\n"
+    "precision mediump float;\n"
+    "#endif\n"
     "attribute vec2 a_pos;\n"
-    "uniform vec2 u_cx_cy;\n"
-    "uniform float u_R;\n"
-    "uniform float u_ringWidth;\n"
-    "uniform vec2 u_resolution;\n"
-    "varying float v_dist;\n"
     "void main() {\n"
-    "    float outerR = u_R + u_ringWidth * 0.5;\n"
-    "    vec2 pos = u_cx_cy + a_pos * outerR;\n"
-    "    v_dist = length(a_pos) * outerR;\n"
-    "    gl_Position = vec4(\n"
-    "        pos.x / u_resolution.x * 2.0 - 1.0,\n"
-    "        1.0 - pos.y / u_resolution.y * 2.0,\n"
-    "        0.0, 1.0\n"
-    "    );\n"
+    "    gl_Position = vec4(a_pos, 0.0, 1.0);\n"
     "}\n";
 
 static const char *RING_FRAG =
+    "#ifdef GL_ES\n"
     "precision mediump float;\n"
+    "#endif\n"
+    "uniform vec2 u_cx_cy;\n"
     "uniform float u_R;\n"
-    "uniform float u_ringWidth;\n"
     "uniform vec4 u_color;\n"
-    "varying float v_dist;\n"
     "void main() {\n"
-    "    float inner = u_R - u_ringWidth * 0.5;\n"
-    "    float outer = u_R + u_ringWidth * 0.5;\n"
-    "    if (v_dist < inner || v_dist > outer) discard;\n"
-    "    gl_FragColor = u_color;\n"
+    "    vec2 d = gl_FragCoord.xy - u_cx_cy;\n"
+    "    float r = length(d);\n"
+    "    float dr = abs(r - u_R);\n"
+    "    if (dr > 1.2) discard;\n"
+    "    float a = (1.0 - dr / 1.2) * u_color.a;\n"
+    "    gl_FragColor = vec4(u_color.rgb, a);\n"
     "}\n";
 
 
@@ -147,7 +168,7 @@ GlobeItem::~GlobeItem()
     delete m_fbo; delete m_glCtx; delete m_surface;
 }
 
-double GlobeItem::radius() const { return qMin(width(), height()) / 2.0 - 4.0; }
+double GlobeItem::radius() const { return qMin(width(), height()) / 2.0 - 8.0; }
 
 void GlobeItem::setCenterLatitude(double lat) {
     lat = qBound(-90.0, lat, 90.0);
@@ -354,17 +375,19 @@ void GlobeItem::drawLines(QOpenGLBuffer &vbo, int *offsets, int segCount,
 }
 
 void GlobeItem::drawRing(int w, int h) {
-    m_ringProg->bind(); m_ringVbo.bind();
+    if (m_ringColor.alpha() <= 0) return;
+    m_ringProg->bind();
+    m_quadVbo.bind();
     int loc = m_ringProg->attributeLocation("a_pos");
     m_ringProg->enableAttributeArray(loc);
     m_ringProg->setAttributeBuffer(loc, GL_FLOAT, 0, 2, 2 * sizeof(float));
-    float cx = float(w)/2.0f, cy = float(h)/2.0f, res[2] = {float(w), float(h)};
-    m_ringProg->setUniformValue("u_cx_cy", cx, cy);
+    float cx = float(w)/2.0f;
+    float glCy = float(h) - float(h)/2.0f;
+    m_ringProg->setUniformValue("u_cx_cy", cx, glCy);
     m_ringProg->setUniformValue("u_R", float(radius()));
-    m_ringProg->setUniformValue("u_ringWidth", 1.5f);
-    m_ringProg->setUniformValueArray("u_resolution", res, 1, 2);
-    QColor rc = m_ringColor;
-    m_ringProg->setUniformValue("u_color", float(rc.redF()), float(rc.greenF()), float(rc.blueF()), float(rc.alphaF()));
-    glDrawArrays(GL_LINE_STRIP, 0, m_ringVertexCount + 1);
-    m_ringProg->disableAttributeArray(loc); m_ringVbo.release(); m_ringProg->release();
+    m_ringProg->setUniformValue("u_color", float(m_ringColor.redF()), float(m_ringColor.greenF()), float(m_ringColor.blueF()), float(m_ringColor.alphaF()));
+    glDrawArrays(GL_TRIANGLES, 0, 6);
+    m_ringProg->disableAttributeArray(loc);
+    m_quadVbo.release();
+    m_ringProg->release();
 }

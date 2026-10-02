@@ -50,13 +50,18 @@ def render_gaza_globe(size, coast_data, coast_offsets, border_data, border_offse
     s = size * scale
     cx = s / 2.0
     cy = s / 2.0
-    R = s * 0.45
+    R = s * 0.43
+    max_dr = scale * 2.5
 
     cLat = GAZA_LAT * math.pi / 180.0
     cLon = GAZA_LON * math.pi / 180.0
 
     sunLat = sun_lat * math.pi / 180.0
     sunLon = (GAZA_LON + sun_lon_offset) * math.pi / 180.0
+
+    dLon_sun = sunLon - cLon
+    sunX_view = math.cos(sunLat) * math.sin(dLon_sun)
+    sunY_view = math.cos(cLat) * math.sin(sunLat) - math.sin(cLat) * math.cos(sunLat) * math.cos(dLon_sun)
 
     sc = (36 / 255.0, 195 / 255.0, 181 / 255.0)
 
@@ -68,13 +73,30 @@ def render_gaza_globe(size, coast_data, coast_offsets, border_data, border_offse
             dx = x - cx
             dy = y - cy
             r = math.hypot(dx, dy)
-            if r > R:
+            if r > R + max_dr:
                 continue
-            edge_alpha = min(1.0, max(0.0, R - r))
+
+            dr = r - R
+            yn_gl = -dy / R
             xn = dx / R
-            yn = dy / R
-            z = math.sqrt(max(0.0, 1.0 - xn * xn - yn * yn))
-            yn_gl = -yn
+            nx = dx / max(0.001, r)
+            ny = -dy / max(0.001, r)
+
+            cosA_limb = nx * sunX_view + ny * sunY_view
+            sun_scatter = max(0.0, min(1.0, (cosA_limb - (-0.14)) / (0.28 - (-0.14))))
+            sun_scatter = sun_scatter * sun_scatter * (3.0 - 2.0 * sun_scatter)
+            limb_intensity = 0.18 + 0.82 * (sun_scatter ** 1.3)
+
+            if r > R:
+                glow = math.exp(-dr / (scale * 0.9)) * (1.0 - dr / max_dr)
+                corona_a = glow * limb_intensity * 0.55
+                whitening = 0.20 * sun_scatter
+                corona_col = [sc[i] * (1.0 - whitening) + whitening for i in range(3)]
+                pixels[x, y] = (int(corona_col[0] * 255), int(corona_col[1] * 255), int(corona_col[2] * 255), int(corona_a * 255))
+                continue
+
+            edge_alpha = min(1.0, max(0.0, R - r))
+            z = math.sqrt(max(0.0, 1.0 - xn * xn - yn_gl * yn_gl))
 
             sinLat = yn_gl * math.cos(cLat) + z * math.sin(cLat)
             cosLat = math.sqrt(max(0.0, 1.0 - sinLat * sinLat))
@@ -88,6 +110,9 @@ def render_gaza_globe(size, coast_data, coast_offsets, border_data, border_offse
             dayT = dayT * dayT * (3.0 - 2.0 * dayT)
 
             col = [nightOcean[i] + (dayOcean[i] - nightOcean[i]) * dayT for i in range(3)]
+            rim = 1.0 - z
+            limb_in = (rim ** 3.0) * 0.32 * limb_intensity
+            col = [min(1.0, col[i] + sc[i] * limb_in) for i in range(3)]
 
             r_c = int(min(255, max(0, col[0] * 255)))
             g_c = int(min(255, max(0, col[1] * 255)))
@@ -145,21 +170,7 @@ def render_gaza_globe(size, coast_data, coast_offsets, border_data, border_offse
     draw.ellipse([cx - R, cy - R, cx + R, cy + R], outline=(36, 195, 181, 150), width=rw)
 
     final_img = img.resize((size, size), Image.LANCZOS)
-
-    glow = Image.new("RGBA", (size, size), (0, 0, 0, 0))
-    gd = ImageDraw.Draw(glow)
-    R_icon = size * 0.45
-    for i in range(4):
-        ri = R_icon + i * (size * 0.012)
-        a = max(0, int(45 - i * 11))
-        gd.ellipse([size / 2 - ri, size / 2 - ri, size / 2 + ri, size / 2 + ri],
-                   outline=(36, 195, 181, a), width=max(1, int(size * 0.01)))
-    glow = glow.filter(ImageFilter.GaussianBlur(radius=max(1, size * 0.02)))
-
-    result = Image.new("RGBA", (size, size), (0, 0, 0, 0))
-    result = Image.alpha_composite(result, glow)
-    result = Image.alpha_composite(result, final_img)
-    return result
+    return final_img
 
 
 def main():
