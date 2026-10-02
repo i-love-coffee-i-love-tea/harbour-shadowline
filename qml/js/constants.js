@@ -47,6 +47,18 @@ var LOC_SPECULAR_RADIUS = 1.8;
 var LOC_SPECULAR_OFFSET = 1.5;
 var LOC_SPECULAR_ALPHA = 0.9;
 
+// Basic location marker (non-selected)
+var LOC_MARKER_SCALE = 0.08;
+var LOC_MARKER_OUTER_RADIUS = 2.8;
+var LOC_MARKER_INNER_RADIUS = 1.2;
+var LOC_MARKER_TIP_RADIUS = 6.0;
+var LOC_MARKER_TIP_INNER = 3.2;
+var LOC_MARKER_TIP_SPECULAR = 1.1;
+var LOC_MARKER_SHADOW_WIDTH = 1.5;
+var LOC_MARKER_STEM_WIDTH = 1.4;
+var LOC_MARKER_STEM_ALPHA = 0.35;
+var LOC_MARKER_TIP_ALPHA = 0.28;
+
 // Selected pin
 var PIN_LENGTH_RATIO = 0.25;
 var PIN_LINE_WIDTH = 2;
@@ -62,6 +74,9 @@ var PIN_ANCHOR_RADIUS = 4;
 // Globe ring
 var GLOBE_RING_LINE_WIDTH = 1.2;
 var GLOBE_RING_ALPHA = 0.35;
+
+// --- Time ---
+var MS_PER_DAY = 86400000;
 
 // --- Timers (ms) ---
 var AUTO_REFRESH_INTERVAL = 60000;

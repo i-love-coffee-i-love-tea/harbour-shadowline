@@ -110,21 +110,16 @@ function subsolarPoint(date) {
     return { lat: declination, lon: subsolarLon };
 }
 
-// Format a Date as HH:MM in local time
-function formatTime(d) {
-    if (!d) return "--:--";
-    var h = d.getHours();
-    var m = d.getMinutes();
-    return (h < 10 ? "0" : "") + h + ":" + (m < 10 ? "0" : "") + m;
-}
-
-// Format a UTC Date as HH:MM with a given UTC offset in hours
-function formatTimeInZone(utcDate, offsetHours) {
-    if (!utcDate) return "--:--";
-    var totalMin = utcDate.getUTCHours() * 60 + utcDate.getUTCMinutes() + Math.round(offsetHours * 60);
-    while (totalMin < 0) totalMin += 1440;
-    while (totalMin >= 1440) totalMin -= 1440;
-    var h = Math.floor(totalMin / 60);
-    var m = totalMin % 60;
-    return (h < 10 ? "0" : "") + h + ":" + (m < 10 ? "0" : "") + m;
+// Compute the UTC timestamp (ms) of the next sunrise/sunset change.
+// Returns null if indeterminate (polar conditions).
+function nextChangeMs(now, data, isNight, lat, lon) {
+    if (isNight) {
+        if (now > data.sunset) {
+            var tomorrow = new Date(now.getTime() + Const.MS_PER_DAY);
+            var td = solarData(tomorrow, lat, lon);
+            return td.sunrise ? td.sunrise.getTime() : null;
+        }
+        return data.sunrise ? data.sunrise.getTime() : null;
+    }
+    return data.sunset ? data.sunset.getTime() : null;
 }

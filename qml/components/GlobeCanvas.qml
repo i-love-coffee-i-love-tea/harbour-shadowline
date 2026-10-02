@@ -104,19 +104,19 @@ Item {
                 var lp = Proj.project(locs[li].lat, locs[li].lon, cLat, cLon, R, cx, cy);
                 if (!lp) continue;
 
-                var scale = 0.08;
+                var scale = Const.LOC_MARKER_SCALE;
                 var tipX = lp.x + scale * (lp.x - cx);
                 var tipY = lp.y + scale * (lp.y - cy);
                 var stemLen = Math.sqrt((tipX - lp.x) * (tipX - lp.x) + (tipY - lp.y) * (tipY - lp.y));
 
                 ctx.beginPath();
-                ctx.arc(lp.x, lp.y, 2.8, 0, Math.PI * 2);
+                ctx.arc(lp.x, lp.y, Const.LOC_MARKER_OUTER_RADIUS, 0, Math.PI * 2);
                 ctx.strokeStyle = "rgba(255, 255, 255, 0.65)";
                 ctx.lineWidth = 1.0;
                 ctx.stroke();
 
                 ctx.beginPath();
-                ctx.arc(lp.x, lp.y, 1.2, 0, Math.PI * 2);
+                ctx.arc(lp.x, lp.y, Const.LOC_MARKER_INNER_RADIUS, 0, Math.PI * 2);
                 ctx.fillStyle = "rgba(255, 255, 255, 0.9)";
                 ctx.fill();
 
@@ -125,27 +125,27 @@ Item {
                     ctx.moveTo(lp.x + 1.0, lp.y + 1.0);
                     ctx.lineTo(tipX + 1.0, tipY + 1.0);
                     ctx.strokeStyle = "rgba(0, 0, 0, 0.35)";
-                    ctx.lineWidth = 1.5;
+                    ctx.lineWidth = Const.LOC_MARKER_SHADOW_WIDTH;
                     ctx.stroke();
 
                     var stemGrad = ctx.createLinearGradient(lp.x, lp.y, tipX, tipY);
-                    stemGrad.addColorStop(0, Qt.rgba(hc.r, hc.g, hc.b, 0.35));
+                    stemGrad.addColorStop(0, Qt.rgba(hc.r, hc.g, hc.b, Const.LOC_MARKER_STEM_ALPHA));
                     stemGrad.addColorStop(1, Qt.rgba(hc.r, hc.g, hc.b, 1.0));
                     ctx.beginPath();
                     ctx.moveTo(lp.x, lp.y);
                     ctx.lineTo(tipX, tipY);
                     ctx.strokeStyle = stemGrad;
-                    ctx.lineWidth = 1.4;
+                    ctx.lineWidth = Const.LOC_MARKER_STEM_WIDTH;
                     ctx.stroke();
                 }
 
                 ctx.beginPath();
-                ctx.arc(tipX, tipY, 6.0, 0, Math.PI * 2);
-                ctx.fillStyle = Qt.rgba(hc.r, hc.g, hc.b, 0.28);
+                ctx.arc(tipX, tipY, Const.LOC_MARKER_TIP_RADIUS, 0, Math.PI * 2);
+                ctx.fillStyle = Qt.rgba(hc.r, hc.g, hc.b, Const.LOC_MARKER_TIP_ALPHA);
                 ctx.fill();
 
                 ctx.beginPath();
-                ctx.arc(tipX, tipY, 3.2, 0, Math.PI * 2);
+                ctx.arc(tipX, tipY, Const.LOC_MARKER_TIP_INNER, 0, Math.PI * 2);
                 ctx.fillStyle = hc;
                 ctx.fill();
                 ctx.lineWidth = 0.8;
@@ -153,7 +153,7 @@ Item {
                 ctx.stroke();
 
                 ctx.beginPath();
-                ctx.arc(tipX - 1.0, tipY - 1.0, 1.1, 0, Math.PI * 2);
+                ctx.arc(tipX - 1.0, tipY - 1.0, Const.LOC_MARKER_TIP_SPECULAR, 0, Math.PI * 2);
                 ctx.fillStyle = "rgba(255, 255, 255, 0.95)";
                 ctx.fill();
             }
@@ -284,10 +284,6 @@ Item {
             var dy = mouse.y - _lastY;
             globe.centerLongitude -= dx * Const.DRAG_SENSITIVITY;
             globe.centerLatitude += dy * Const.DRAG_SENSITIVITY;
-            if (globe.centerLatitude > 90) globe.centerLatitude = 90;
-            if (globe.centerLatitude < -90) globe.centerLatitude = -90;
-            while (globe.centerLongitude > 180) globe.centerLongitude -= 360;
-            while (globe.centerLongitude < -180) globe.centerLongitude += 360;
             _lastX = mouse.x;
             _lastY = mouse.y;
         }

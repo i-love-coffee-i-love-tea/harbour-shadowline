@@ -71,8 +71,8 @@ def write_header(coast_segs, border_segs, outpath):
 
 if __name__ == '__main__':
     base = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    coast = parse_js_segments(os.path.join(base, 'qml/js/coastlines.js'))
-    border = parse_js_segments(os.path.join(base, 'qml/js/borders.js'))
+    coast = parse_js_segments(os.path.join(base, 'tools/coastlines.js'))
+    border = parse_js_segments(os.path.join(base, 'tools/borders.js'))
     outpath = os.path.join(base, 'src/geomdata.h')
     write_header(coast, border, outpath)
     print(f'Generated {outpath}: {len(coast)} coast segments, {len(border)} border segments')

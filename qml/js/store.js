@@ -1,5 +1,7 @@
 var _db = null;
 
+// Duplicated from constants.js — cannot use .import in non-pragma-library JS files
+// because store.js needs QML LocalStorage context.
 var DB_NAME = "harbour-shadowline";
 var DB_VERSION = "1.0";
 var DB_DESCRIPTION = "Shadow Line locations";
@@ -22,7 +24,7 @@ function openDb() {
         try {
             tx.executeSql("ALTER TABLE locations ADD COLUMN tz TEXT DEFAULT ''");
         } catch (e) {
-            // column already exists
+            // column already exists — SQLite throws on duplicate ALTER TABLE
         }
         try {
             tx.executeSql("ALTER TABLE locations ADD COLUMN off_o REAL");
@@ -136,10 +138,14 @@ function removeLocation(id) {
 function loadSetting(key, defaultValue) {
     var db = openDb();
     var value = defaultValue;
-    db.readTransaction(function(tx) {
-        var rs = tx.executeSql("SELECT value FROM settings WHERE key=?", [key]);
-        if (rs.rows.length > 0) value = parseFloat(rs.rows.item(0).value);
-    });
+    try {
+        db.readTransaction(function(tx) {
+            var rs = tx.executeSql("SELECT value FROM settings WHERE key=?", [key]);
+            if (rs.rows.length > 0) value = parseFloat(rs.rows.item(0).value);
+        });
+    } catch (e) {
+        console.warn("store.js: loadSetting('" + key + "') failed (" + e.message + ")");
+    }
     return value;
 }
 

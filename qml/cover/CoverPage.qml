@@ -6,6 +6,7 @@ import "../js/solar.js" as Solar
 import "../js/store.js" as Store
 import "../js/constants.js" as Const
 import "../js/timezone.js" as Timezone
+import "../js/timeutil.js" as TimeUtil
 
 CoverBackground {
     id: cover
@@ -63,15 +64,6 @@ CoverBackground {
         }
     }
 
-    function _formatCountdown(ms) {
-        if (ms <= 0) return qsTr("now");
-        var totalMin = Math.floor(ms / 60000);
-        var h = Math.floor(totalMin / 60);
-        var m = totalMin % 60;
-        if (h > 0) return h + "h " + m + "m";
-        return m + "m";
-    }
-
     function refreshCover() {
         try {
             var locs = Store.loadLocations();
@@ -116,23 +108,11 @@ CoverBackground {
             var isNight = (now < data.sunrise || now > data.sunset);
             cover._isNight = isNight;
 
-            var nextChangeMs = null;
-            if (isNight) {
-                if (now > data.sunset) {
-                    var tomorrow = new Date(now.getTime() + 86400000);
-                    var td = Solar.solarData(tomorrow, loc.lat, loc.lon);
-                    nextChangeMs = td.sunrise ? td.sunrise.getTime() : null;
-                } else {
-                    nextChangeMs = data.sunrise ? data.sunrise.getTime() : null;
-                }
-            } else {
-                nextChangeMs = data.sunset ? data.sunset.getTime() : null;
-            }
-
-            if (nextChangeMs !== null) {
-                var countdown = _formatCountdown(nextChangeMs - now.getTime());
+            var nextMs = Solar.nextChangeMs(now, data, isNight, loc.lat, loc.lon);
+            if (nextMs !== null) {
+                var cd = TimeUtil.formatCountdown(nextMs - now.getTime());
                 var label = isNight ? qsTr("day") : qsTr("night");
-                cover._countdownText = label + " \u2192 " + countdown; // "day → 2h 15m"
+                cover._countdownText = label + " \u2192 " + (cd || qsTr("now"));
             } else {
                 cover._countdownText = "";
             }
@@ -147,7 +127,7 @@ CoverBackground {
 
     // Refresh every minute for accurate countdown
     Timer {
-        interval: 60000
+        interval: Const.AUTO_REFRESH_INTERVAL
         running: true
         repeat: true
         onTriggered: refreshCover()

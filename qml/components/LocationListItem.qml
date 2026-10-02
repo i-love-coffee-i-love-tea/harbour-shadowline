@@ -2,6 +2,7 @@ import QtQuick 2.6
 import Sailfish.Silica 1.0
 import "../js/solar.js" as Solar
 import "../js/timezone.js" as Timezone
+import "../js/timeutil.js" as TimeUtil
 
 ListItem {
     id: locationItem
@@ -128,27 +129,6 @@ ListItem {
         return h + "h " + m + "m";
     }
 
-    function _formatCountdown(ms) {
-        if (ms <= 0) return qsTr("now");
-        var totalMin = Math.floor(ms / 60000);
-        var h = Math.floor(totalMin / 60);
-        var m = totalMin % 60;
-        if (h > 0) return h + "h " + m + "m";
-        return m + "m";
-    }
-
-    function _computeNextChangeTime(now, data) {
-        if (_isNight) {
-            if (now > data.sunset) {
-                var tomorrow = new Date(now.getTime() + 86400000);
-                var tomorrowData = Solar.solarData(tomorrow, locationLat, locationLon);
-                return tomorrowData.sunrise ? tomorrowData.sunrise.getTime() : null;
-            }
-            return data.sunrise ? data.sunrise.getTime() : null;
-        }
-        return data.sunset ? data.sunset.getTime() : null;
-    }
-
     function updateTimes() {
         try {
         var now = new Date();
@@ -184,9 +164,9 @@ ListItem {
         var diffMs = data.sunset.getTime() - data.sunrise.getTime();
         _dayLength = _formatDuration(diffMs / 60000);
 
-        var nextChangeMs = _computeNextChangeTime(now, data);
-        if (nextChangeMs !== null) {
-            _timeUntilChange = _formatCountdown(nextChangeMs - now.getTime());
+        var nextMs = Solar.nextChangeMs(now, data, _isNight, locationLat, locationLon);
+        if (nextMs !== null) {
+            _timeUntilChange = TimeUtil.formatCountdown(nextMs - now.getTime()) || qsTr("now");
         } else {
             _timeUntilChange = "";
         }

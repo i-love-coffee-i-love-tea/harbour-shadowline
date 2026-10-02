@@ -7,6 +7,9 @@
 #include <QTimer>
 #include <QOpenGLFramebufferObject>
 
+static constexpr double DEG2RAD = M_PI / 180.0;
+static constexpr double RAD2DEG = 180.0 / M_PI;
+
 static const char *GLOBE_VERT =
     "#ifdef GL_ES\n"
     "precision mediump float;\n"
@@ -161,12 +164,7 @@ GlobeItem::GlobeItem(QQuickItem *parent)
     t->start(60000);
 }
 
-GlobeItem::~GlobeItem()
-{
-    delete m_globeProg; delete m_lineProg; delete m_ringProg;
-    delete[] m_coastOffsets; delete[] m_borderOffsets;
-    delete m_fbo; delete m_glCtx; delete m_surface;
-}
+GlobeItem::~GlobeItem() = default;
 
 double GlobeItem::radius() const { return qMin(width(), height()) / 2.0 - 8.0; }
 
@@ -192,6 +190,10 @@ void GlobeItem::geometryChanged(const QRectF &n, const QRectF &o) {
     QQuickPaintedItem::geometryChanged(n, o); emit radiusChanged(); update();
 }
 
+// Solar position using Spencer's Fourier series approximation.
+// Coefficients from: J.W. Spencer, "Fourier series representation of the
+// position of the sun", Search 2(5), 172 (1971).
+// See also NOAA Solar Calculator: https://gml.noaa.gov/grad/solcalc/
 void GlobeItem::updateSunPosition() {
     QDateTime now = QDateTime::currentDateTimeUtc();
     int doy = now.date().dayOfYear();
@@ -202,7 +204,7 @@ void GlobeItem::updateSunPosition() {
     double nlon = -((hour - 12.0) * 15.0 + eq / 4.0);
     while (nlon > 180) { nlon -= 360; }
     while (nlon < -180) { nlon += 360; }
-    double nlat = decl * 180.0 / M_PI;
+    double nlat = decl * RAD2DEG;
     if (!qFuzzyCompare(m_sunLat, nlat) || !qFuzzyCompare(m_sunLon, nlon)) {
         m_sunLat = nlat; m_sunLon = nlon; emit sunChanged(); update();
     }
@@ -210,11 +212,11 @@ void GlobeItem::updateSunPosition() {
 
 void GlobeItem::initGl() {
     if (m_glReady) return;
-    m_surface = new QOffscreenSurface; m_surface->create();
-    m_glCtx = new QOpenGLContext;
+    m_surface.reset(new QOffscreenSurface); m_surface->create();
+    m_glCtx.reset(new QOpenGLContext);
     if (window() && window()->openglContext()) m_glCtx->setShareContext(window()->openglContext());
     m_glCtx->setFormat(m_surface->requestedFormat()); m_glCtx->create();
-    m_glCtx->makeCurrent(m_surface); initializeOpenGLFunctions();
+    m_glCtx->makeCurrent(m_surface.get()); initializeOpenGLFunctions();
 
     static const float q[] = {-1,-1, 1,-1, -1,1, 1,-1, 1,1, -1,1};
     m_quadVbo.create(); m_quadVbo.bind(); m_quadVbo.allocate(q, sizeof(q)); m_quadVbo.release();
@@ -227,36 +229,45 @@ void GlobeItem::initGl() {
     }
     m_ringVbo.create(); m_ringVbo.bind(); m_ringVbo.allocate(rd.constData(), rd.size()*sizeof(float)); m_ringVbo.release();
 
-    m_globeProg = new QOpenGLShaderProgram;
-    m_globeProg->addShaderFromSourceCode(QOpenGLShader::Vertex, GLOBE_VERT);
-    m_globeProg->addShaderFromSourceCode(QOpenGLShader::Fragment, GLOBE_FRAG);
-    m_globeProg->link();
+    m_globeProg.reset(new QOpenGLShaderProgram);
+    if (!m_globeProg->addShaderFromSourceCode(QOpenGLShader::Vertex, GLOBE_VERT)
+        || !m_globeProg->addShaderFromSourceCode(QOpenGLShader::Fragment, GLOBE_FRAG)
+        || !m_globeProg->link()) {
+        qWarning("GlobeItem: globe shader failed: %s", qPrintable(m_globeProg->log()));
+        return;
+    }
 
-    m_lineProg = new QOpenGLShaderProgram;
-    m_lineProg->addShaderFromSourceCode(QOpenGLShader::Vertex, LINE_VERT);
-    m_lineProg->addShaderFromSourceCode(QOpenGLShader::Fragment, LINE_FRAG);
-    m_lineProg->link();
+    m_lineProg.reset(new QOpenGLShaderProgram);
+    if (!m_lineProg->addShaderFromSourceCode(QOpenGLShader::Vertex, LINE_VERT)
+        || !m_lineProg->addShaderFromSourceCode(QOpenGLShader::Fragment, LINE_FRAG)
+        || !m_lineProg->link()) {
+        qWarning("GlobeItem: line shader failed: %s", qPrintable(m_lineProg->log()));
+        return;
+    }
 
-    m_ringProg = new QOpenGLShaderProgram;
-    m_ringProg->addShaderFromSourceCode(QOpenGLShader::Vertex, RING_VERT);
-    m_ringProg->addShaderFromSourceCode(QOpenGLShader::Fragment, RING_FRAG);
-    m_ringProg->link();
+    m_ringProg.reset(new QOpenGLShaderProgram);
+    if (!m_ringProg->addShaderFromSourceCode(QOpenGLShader::Vertex, RING_VERT)
+        || !m_ringProg->addShaderFromSourceCode(QOpenGLShader::Fragment, RING_FRAG)
+        || !m_ringProg->link()) {
+        qWarning("GlobeItem: ring shader failed: %s", qPrintable(m_ringProg->log()));
+        return;
+    }
 
     using namespace GeomData;
     m_coastSegCount = COAST_SEGMENT_COUNT;
-    m_coastOffsets = new int[m_coastSegCount + 1];
+    m_coastOffsets.reset(new int[m_coastSegCount + 1]);
     for (int i = 0; i <= m_coastSegCount; i++) m_coastOffsets[i] = COAST_OFFSETS[i];
     int cf = m_coastOffsets[m_coastSegCount] * 2;
     float *cr = new float[cf];
-    for (int i = 0; i < cf; i += 2) { cr[i] = COAST_DATA[i] * float(M_PI/180.0); cr[i+1] = COAST_DATA[i+1] * float(M_PI/180.0); }
+    for (int i = 0; i < cf; i += 2) { cr[i] = COAST_DATA[i] * float(DEG2RAD); cr[i+1] = COAST_DATA[i+1] * float(DEG2RAD); }
     m_coastVbo.create(); m_coastVbo.bind(); m_coastVbo.allocate(cr, cf*sizeof(float)); m_coastVbo.release(); delete[] cr;
 
     m_borderSegCount = BORDER_SEGMENT_COUNT;
-    m_borderOffsets = new int[m_borderSegCount + 1];
+    m_borderOffsets.reset(new int[m_borderSegCount + 1]);
     for (int i = 0; i <= m_borderSegCount; i++) m_borderOffsets[i] = BORDER_OFFSETS[i];
     int bf = m_borderOffsets[m_borderSegCount] * 2;
     float *br = new float[bf];
-    for (int i = 0; i < bf; i += 2) { br[i] = BORDER_DATA[i] * float(M_PI/180.0); br[i+1] = BORDER_DATA[i+1] * float(M_PI/180.0); }
+    for (int i = 0; i < bf; i += 2) { br[i] = BORDER_DATA[i] * float(DEG2RAD); br[i+1] = BORDER_DATA[i+1] * float(DEG2RAD); }
     m_borderVbo.create(); m_borderVbo.bind(); m_borderVbo.allocate(br, bf*sizeof(float)); m_borderVbo.release(); delete[] br;
 
     m_glReady = true;
@@ -266,13 +277,17 @@ void GlobeItem::paint(QPainter *painter) {
     int w = int(width()), h = int(height());
     if (w <= 0 || h <= 0) return;
     initGl();
-    m_glCtx->makeCurrent(m_surface);
+    if (!m_glReady) return;
+    m_glCtx->makeCurrent(m_surface.get());
     if (!m_fbo || m_fbo->size() != QSize(w, h)) {
-        delete m_fbo;
         QOpenGLFramebufferObjectFormat fmt;
         fmt.setAttachment(QOpenGLFramebufferObject::CombinedDepthStencil);
         fmt.setInternalTextureFormat(GL_RGBA);
-        m_fbo = new QOpenGLFramebufferObject(QSize(w, h), fmt);
+        m_fbo.reset(new QOpenGLFramebufferObject(QSize(w, h), fmt));
+    }
+    if (!m_fbo) {
+        qWarning("GlobeItem: failed to allocate FBO (%dx%d)", w, h);
+        return;
     }
     renderGlobe(w, h);
 
@@ -307,8 +322,8 @@ void GlobeItem::renderGlobe(int w, int h) {
 
     drawGlobe(w, h);
 
-    drawLines(m_borderVbo, m_borderOffsets, m_borderSegCount, m_borderColor, 0.8f, w, h);
-    drawLines(m_coastVbo, m_coastOffsets, m_coastSegCount, m_coastColor, 1.2f, w, h);
+    drawLines(m_borderVbo, m_borderOffsets.get(), m_borderSegCount, m_borderColor, 0.8f, w, h);
+    drawLines(m_coastVbo, m_coastOffsets.get(), m_coastSegCount, m_coastColor, 1.2f, w, h);
 
     drawRing(w, h);
 
@@ -326,10 +341,10 @@ void GlobeItem::drawGlobe(int w, int h) {
     float glCy = float(h) - float(h) / 2.0f;
     m_globeProg->setUniformValue("u_cx_cy", cx, glCy);
     m_globeProg->setUniformValue("u_R", float(radius()));
-    m_globeProg->setUniformValue("u_cLatR", float(m_centerLat * M_PI / 180.0));
-    m_globeProg->setUniformValue("u_cLonR", float(m_centerLon * M_PI / 180.0));
-    m_globeProg->setUniformValue("u_sunLatR", float(m_sunLat * M_PI / 180.0));
-    m_globeProg->setUniformValue("u_sunLonR", float(m_sunLon * M_PI / 180.0));
+    m_globeProg->setUniformValue("u_cLatR", float(m_centerLat * DEG2RAD));
+    m_globeProg->setUniformValue("u_cLonR", float(m_centerLon * DEG2RAD));
+    m_globeProg->setUniformValue("u_sunLatR", float(m_sunLat * DEG2RAD));
+    m_globeProg->setUniformValue("u_sunLonR", float(m_sunLon * DEG2RAD));
     m_globeProg->setUniformValue("u_oceanColor", float(m_oceanColor.redF()), float(m_oceanColor.greenF()), float(m_oceanColor.blueF()), float(m_oceanColor.alphaF()));
     m_globeProg->setUniformValue("u_nightColor", float(m_nightColor.redF()), float(m_nightColor.greenF()), float(m_nightColor.blueF()), float(m_nightColor.alphaF()));
     QColor sc = m_sunColor.isValid() ? m_sunColor : m_coastColor;
@@ -348,8 +363,8 @@ void GlobeItem::drawLines(QOpenGLBuffer &vbo, int *offsets, int segCount,
     m_lineProg->enableAttributeArray(loc);
     m_lineProg->setAttributeBuffer(loc, GL_FLOAT, 0, 2, 2 * sizeof(float));
     float cx = float(w)/2.0f, cy = float(h)/2.0f, res[2] = {float(w), float(h)};
-    m_lineProg->setUniformValue("u_cLatR", float(m_centerLat * M_PI / 180.0));
-    m_lineProg->setUniformValue("u_cLonR", float(m_centerLon * M_PI / 180.0));
+    m_lineProg->setUniformValue("u_cLatR", float(m_centerLat * DEG2RAD));
+    m_lineProg->setUniformValue("u_cLonR", float(m_centerLon * DEG2RAD));
     m_lineProg->setUniformValue("u_R", float(radius()));
     m_lineProg->setUniformValue("u_cx_cy", cx, cy);
     m_lineProg->setUniformValueArray("u_resolution", res, 1, 2);

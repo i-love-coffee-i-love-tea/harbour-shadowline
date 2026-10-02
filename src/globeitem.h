@@ -1,5 +1,6 @@
 #pragma once
 
+#include <memory>
 #include <QQuickPaintedItem>
 #include <QOpenGLShaderProgram>
 #include <QOpenGLFunctions>
@@ -24,7 +25,7 @@ class GlobeItem : public QQuickPaintedItem, protected QOpenGLFunctions {
 
 public:
     explicit GlobeItem(QQuickItem *parent = nullptr);
-    ~GlobeItem();
+    ~GlobeItem() override;
     void paint(QPainter *painter) override;
 
     double centerLatitude() const { return m_centerLat; }
@@ -65,8 +66,6 @@ protected:
 
 private:
     void initGl();
-    void initShaders();
-    void initGeomData();
     void renderGlobe(int w, int h);
     void drawGlobe(int w, int h);
     void drawLines(QOpenGLBuffer &vbo, int *offsets, int segCount,
@@ -74,22 +73,22 @@ private:
     void drawRing(int w, int h);
     void updateSunPosition();
 
-    QOffscreenSurface *m_surface = nullptr;
-    QOpenGLContext *m_glCtx = nullptr;
-    QOpenGLFramebufferObject *m_fbo = nullptr;
+    std::unique_ptr<QOffscreenSurface> m_surface;
+    std::unique_ptr<QOpenGLContext> m_glCtx;
+    std::unique_ptr<QOpenGLFramebufferObject> m_fbo;
 
-    QOpenGLShaderProgram *m_globeProg = nullptr;
-    QOpenGLShaderProgram *m_lineProg = nullptr;
-    QOpenGLShaderProgram *m_ringProg = nullptr;
+    std::unique_ptr<QOpenGLShaderProgram> m_globeProg;
+    std::unique_ptr<QOpenGLShaderProgram> m_lineProg;
+    std::unique_ptr<QOpenGLShaderProgram> m_ringProg;
 
     QOpenGLBuffer m_coastVbo;
     QOpenGLBuffer m_borderVbo;
     QOpenGLBuffer m_quadVbo;
     QOpenGLBuffer m_ringVbo;
 
-    int *m_coastOffsets = nullptr;
+    std::unique_ptr<int[]> m_coastOffsets;
     int m_coastSegCount = 0;
-    int *m_borderOffsets = nullptr;
+    std::unique_ptr<int[]> m_borderOffsets;
     int m_borderSegCount = 0;
     int m_ringVertexCount = 0;
 
