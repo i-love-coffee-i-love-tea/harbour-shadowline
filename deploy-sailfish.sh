@@ -8,34 +8,18 @@ set -e
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
-RPM_PATH="$1"
-TARGET_HOST="$2"
+ARG1="$1"
+ARG2="$2"
 
-# 1. Locate RPM package
-if [ -z "$RPM_PATH" ] || [ ! -f "$RPM_PATH" ]; then
-    if [ -n "$RPM_PATH" ] && [ ! -f "$RPM_PATH" ]; then
-        if [ -z "$TARGET_HOST" ]; then
-            TARGET_HOST="$RPM_PATH"
-            RPM_PATH=""
-        fi
-    fi
+if [ -n "$ARG1" ] && [ -f "$ARG1" ]; then
+    RPM_PATH="$ARG1"
+    TARGET_HOST="$ARG2"
+elif [ -n "$ARG1" ]; then
+    TARGET_HOST="$ARG1"
+    RPM_PATH="$ARG2"
 fi
 
-if [ -z "$RPM_PATH" ]; then
-    RPM_PATH="$(ls -t "$SCRIPT_DIR/rpms/"*.rpm 2>/dev/null | head -n 1 || true)"
-    if [ -z "$RPM_PATH" ]; then
-        RPM_PATH="$(ls -t "$SCRIPT_DIR/"*.rpm 2>/dev/null | head -n 1 || true)"
-    fi
-fi
-
-if [ -z "$RPM_PATH" ] || [ ! -f "$RPM_PATH" ]; then
-    echo "ERROR: No RPM package found. Build first with ./build-sailfish.sh"
-    exit 1
-fi
-
-RPM_FILE="$(basename "$RPM_PATH")"
-
-# 2. Determine target host
+# 1. Determine target host
 if [ -z "$TARGET_HOST" ]; then
     if [ -n "$PHONE_HOST" ]; then
         TARGET_HOST="$PHONE_HOST"
@@ -50,19 +34,41 @@ if [ -z "$TARGET_HOST" ]; then
     fi
 fi
 
-echo "=== Deploying $RPM_FILE to $TARGET_HOST ==="
-
-# 3. Verify SSH connectivity
+# 2. Verify SSH connectivity and target architecture
 echo "Checking connection to $TARGET_HOST..."
-REMOTE_INFO="$(ssh -o ConnectTimeout=5 "$TARGET_HOST" 'id -u; echo "$HOME"' 2>/dev/null)" || {
+REMOTE_INFO="$(ssh -o ConnectTimeout=5 "$TARGET_HOST" 'id -u; echo "$HOME"; uname -m' 2>/dev/null)" || {
     echo "ERROR: Cannot connect to $TARGET_HOST. Check SSH and developer mode."
     exit 1
 }
 
 REMOTE_UID="$(echo "$REMOTE_INFO" | sed -n '1p')"
 REMOTE_HOME="$(echo "$REMOTE_INFO" | sed -n '2p')"
+TARGET_ARCH="$(echo "$REMOTE_INFO" | sed -n '3p')"
 REMOTE_DOWNLOADS="$REMOTE_HOME/Downloads"
+
+# 3. Locate RPM package (prefer architecture matching target device)
+if [ -z "$RPM_PATH" ] || [ ! -f "$RPM_PATH" ]; then
+    RPM_PATH=""
+    if [ -n "$TARGET_ARCH" ]; then
+        RPM_PATH="$(ls -t "$SCRIPT_DIR/rpms/"*."$TARGET_ARCH".rpm 2>/dev/null | head -n 1 || true)"
+    fi
+    if [ -z "$RPM_PATH" ]; then
+        RPM_PATH="$(ls -t "$SCRIPT_DIR/rpms/"*.rpm 2>/dev/null | head -n 1 || true)"
+    fi
+    if [ -z "$RPM_PATH" ]; then
+        RPM_PATH="$(ls -t "$SCRIPT_DIR/"*.rpm 2>/dev/null | head -n 1 || true)"
+    fi
+fi
+
+if [ -z "$RPM_PATH" ] || [ ! -f "$RPM_PATH" ]; then
+    echo "ERROR: No RPM package found. Build first with ./build-sailfish.sh"
+    exit 1
+fi
+
+RPM_FILE="$(basename "$RPM_PATH")"
 REMOTE_DEST="$REMOTE_DOWNLOADS/$RPM_FILE"
+
+echo "=== Deploying $RPM_FILE to $TARGET_HOST ($TARGET_ARCH) ==="
 
 # 4. Copy and install
 echo "Stopping any running harbour-shadowline on $TARGET_HOST..."

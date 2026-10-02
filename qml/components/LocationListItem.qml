@@ -15,6 +15,23 @@ ListItem {
     property string _dayLength: ""
     property string _currentTime: ""
     property string _timeUntilChange: ""
+    property bool _isPolarDay: false
+    property bool _isPolarNight: false
+    property bool _transitionNow: false
+
+    property string _statusText: {
+        if (_isPolarDay) return qsTr("Polar day • 24h daylight");
+        if (_isPolarNight) return qsTr("Polar night • No daylight");
+        if (_transitionNow) {
+            return _isNight ? (_dayLength !== "" ? qsTr("Sunrise now • %1 daylight").arg(_dayLength) : qsTr("Sunrise now"))
+                            : (_dayLength !== "" ? qsTr("Sunset now • %1 daylight").arg(_dayLength) : qsTr("Sunset now"));
+        }
+        if (_timeUntilChange !== "") {
+            return _isNight ? (_dayLength !== "" ? qsTr("Sunrise in %1 • %2 daylight").arg(_timeUntilChange).arg(_dayLength) : qsTr("Sunrise in %1").arg(_timeUntilChange))
+                            : (_dayLength !== "" ? qsTr("Sunset in %1 • %2 daylight").arg(_timeUntilChange).arg(_dayLength) : qsTr("Sunset in %1").arg(_timeUntilChange));
+        }
+        return _dayLength !== "" ? qsTr("%1 daylight").arg(_dayLength) : "";
+    }
 
     contentHeight: mainRow.height + 2 * Theme.paddingSmall
 
@@ -52,18 +69,20 @@ ListItem {
             }
 
             Label {
+                width: parent.width
                 text: _currentTime + "  \u2022  " + locationLat.toFixed(1) + "\u00B0" + (locationLat >= 0 ? "N" : "S") + "  "
                       + Math.abs(locationLon).toFixed(1) + "\u00B0" + (locationLon >= 0 ? "E" : "W")
                 color: Theme.highlightColor
                 font.pixelSize: Theme.fontSizeExtraSmall
+                truncationMode: TruncationMode.Fade
             }
 
             Label {
-                text: _timeUntilChange !== ""
-                      ? qsTr("in %1: %2 (%3)").arg(_timeUntilChange).arg(_isNight ? qsTr("day") : qsTr("night")).arg(_dayLength)
-                      : (_dayLength !== "" ? qsTr("day %1").arg(_dayLength) : "")
+                width: parent.width
+                text: _statusText
                 color: Theme.secondaryColor
                 font.pixelSize: Theme.fontSizeExtraSmall
+                truncationMode: TruncationMode.Fade
             }
         }
 
@@ -74,6 +93,7 @@ ListItem {
             width: Theme.itemSizeLarge
 
             Row {
+                visible: !_isPolarDay && !_isPolarNight
                 spacing: Theme.paddingSmall
                 anchors.right: parent.right
 
@@ -81,31 +101,37 @@ ListItem {
                     text: "\u2191"
                     color: Theme.highlightColor
                     font.pixelSize: Theme.fontSizeSmall
+                    anchors.verticalCenter: parent.verticalCenter
                 }
                 Label {
                     id: sunriseLabel
                     color: Theme.primaryColor
                     font.pixelSize: Theme.fontSizeSmall
+                    anchors.verticalCenter: parent.verticalCenter
                 }
             }
 
             Row {
+                visible: !_isPolarDay && !_isPolarNight
                 spacing: Theme.paddingSmall
                 anchors.right: parent.right
 
                 Label {
-                    text: "\u2299"
+                    text: qsTr("noon")
                     color: Theme.secondaryHighlightColor
-                    font.pixelSize: Theme.fontSizeSmall
+                    font.pixelSize: Theme.fontSizeExtraSmall
+                    anchors.verticalCenter: parent.verticalCenter
                 }
                 Label {
                     id: solarNoonLabel
                     color: Theme.primaryColor
                     font.pixelSize: Theme.fontSizeSmall
+                    anchors.verticalCenter: parent.verticalCenter
                 }
             }
 
             Row {
+                visible: !_isPolarDay && !_isPolarNight
                 spacing: Theme.paddingSmall
                 anchors.right: parent.right
 
@@ -113,12 +139,22 @@ ListItem {
                     text: "\u2193"
                     color: Theme.secondaryHighlightColor
                     font.pixelSize: Theme.fontSizeSmall
+                    anchors.verticalCenter: parent.verticalCenter
                 }
                 Label {
                     id: sunsetLabel
                     color: Theme.primaryColor
                     font.pixelSize: Theme.fontSizeSmall
+                    anchors.verticalCenter: parent.verticalCenter
                 }
+            }
+
+            Label {
+                anchors.right: parent.right
+                visible: _isPolarDay || _isPolarNight
+                text: _isPolarDay ? qsTr("Polar day") : qsTr("Polar night")
+                color: Theme.secondaryHighlightColor
+                font.pixelSize: Theme.fontSizeSmall
             }
         }
     }
@@ -136,26 +172,34 @@ ListItem {
         _currentTime = Timezone.getLocalTime(locationOff, locationLat, locationLon);
 
         if (data.polarDay) {
-            sunriseLabel.text = qsTr("Polar day");
-            sunsetLabel.text = "";
-            solarNoonLabel.text = "--:--";
+            _isPolarDay = true;
+            _isPolarNight = false;
+            _transitionNow = false;
             _isNight = false;
             _dayLength = "24h 0m";
             _timeUntilChange = "";
+            sunriseLabel.text = "";
+            sunsetLabel.text = "";
+            solarNoonLabel.text = "";
             return;
         }
 
         if (data.polarNight) {
-            sunriseLabel.text = qsTr("Polar night");
-            sunsetLabel.text = "";
-            solarNoonLabel.text = "--:--";
+            _isPolarDay = false;
+            _isPolarNight = true;
+            _transitionNow = false;
             _isNight = true;
             _dayLength = "0h 0m";
             _timeUntilChange = "";
+            sunriseLabel.text = "";
+            sunsetLabel.text = "";
+            solarNoonLabel.text = "";
             return;
         }
 
         // Normal case
+        _isPolarDay = false;
+        _isPolarNight = false;
         sunriseLabel.text = Timezone.formatLocationTime(data.sunrise, locationOff, locationLat, locationLon);
         sunsetLabel.text = Timezone.formatLocationTime(data.sunset, locationOff, locationLat, locationLon);
         solarNoonLabel.text = Timezone.formatLocationTime(data.solarNoon, locationOff, locationLat, locationLon);
@@ -166,12 +210,24 @@ ListItem {
 
         var nextMs = Solar.nextChangeMs(now, data, _isNight, locationLat, locationLon);
         if (nextMs !== null) {
-            _timeUntilChange = TimeUtil.formatCountdown(nextMs - now.getTime()) || qsTr("now");
+            var remainingMs = nextMs - now.getTime();
+            if (TimeUtil.isTransitionImminent(remainingMs)) {
+                _transitionNow = true;
+                _timeUntilChange = "";
+            } else {
+                _transitionNow = false;
+                _timeUntilChange = TimeUtil.formatCountdown(remainingMs) || "";
+            }
         } else {
+            _transitionNow = false;
             _timeUntilChange = "";
         }
         } catch (e) {
             console.warn("LocationListItem: updateTimes failed for " + locationName + " (" + e.message + ")");
+            _isPolarDay = false;
+            _isPolarNight = false;
+            _transitionNow = false;
+            _timeUntilChange = "";
             sunriseLabel.text = "--:--";
             sunsetLabel.text = "--:--";
             solarNoonLabel.text = "--:--";

@@ -14,6 +14,14 @@
   <metadata_license>CC0-1.0</metadata_license>
   <project_license>MIT</project_license>
   <releases>
+    <release version="1.1.0" date="2026-10-03">
+      <description>
+        <p>Improved location list UX with natural solar event phrasing and clear noon indicator.</p>
+        <p>Migrated globe rendering to hardware-accelerated GLES 2.0 with enhanced lifecycle stability.</p>
+        <p>Visual refinements including sun corona effect and cleaner polar day/night indicators.</p>
+        <p>Restricted application permissions to Location only.</p>
+      </description>
+    </release>
     <release version="1.0.0" date="2026-10-02">
       <description><p>Initial release.</p></description>
     </release>
