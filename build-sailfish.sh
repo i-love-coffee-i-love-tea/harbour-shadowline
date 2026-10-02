@@ -33,7 +33,7 @@ for ARCH in $ARCHES; do
     mkdir -p "$BUILD_DIR"
 
     # Symlink source directories into build dir so the RPM spec's relative paths work
-    for d in src qml rpm translations; do
+    for d in src qml rpm translations privileges; do
         if [ ! -e "$BUILD_DIR/$d" ]; then
             ln -s "$SCRIPT_DIR/$d" "$BUILD_DIR/$d"
         fi

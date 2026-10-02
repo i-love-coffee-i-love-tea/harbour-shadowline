@@ -3,7 +3,15 @@ TARGET = harbour-shadowline
 CONFIG += sailfishapp
 QT += quick qml positioning
 
-SOURCES += src/main.cpp
+SOURCES += \
+    src/main.cpp \
+    src/globeitem.cpp \
+    src/globerenderer.cpp
+
+HEADERS += \
+    src/globeitem.h \
+    src/globerenderer.h \
+    src/geomdata.h
 
 OTHER_FILES += \
     qml/harbour-shadowline.qml \
