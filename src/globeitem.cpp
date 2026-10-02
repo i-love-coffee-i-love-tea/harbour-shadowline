@@ -1,137 +1,372 @@
 #include "globeitem.h"
-#include "globerenderer.h"
+#include "geomdata.h"
+#include <QPainter>
+#include <QQuickWindow>
 #include <QtMath>
 #include <QDateTime>
 #include <QTimer>
+#include <QOpenGLFramebufferObject>
+
+static const char *GLOBE_VERT =
+    "#ifdef GL_ES\n"
+    "precision mediump float;\n"
+    "#endif\n"
+    "attribute vec2 a_pos;\n"
+    "void main() { gl_Position = vec4(a_pos, 0.0, 1.0); }\n";
+
+static const char *GLOBE_FRAG =
+    "#ifdef GL_ES\n"
+    "precision mediump float;\n"
+    "#endif\n"
+    "uniform vec2 u_cx_cy;\n"
+    "uniform float u_R;\n"
+    "uniform float u_cLatR;\n"
+    "uniform float u_cLonR;\n"
+    "uniform float u_sunLatR;\n"
+    "uniform float u_sunLonR;\n"
+    "uniform vec4 u_oceanColor;\n"
+    "uniform vec4 u_nightColor;\n"
+    "uniform vec4 u_sunColor;\n"
+    "void main() {\n"
+    "    vec2 d = gl_FragCoord.xy - u_cx_cy;\n"
+    "    float r = length(d);\n"
+    "    if (r > u_R) discard;\n"
+    "    float edgeAlpha = smoothstep(u_R, u_R - 1.0, r);\n"
+    "    float xn = d.x / u_R;\n"
+    "    float yn = d.y / u_R;\n"
+    "    float z = sqrt(max(0.0, 1.0 - xn * xn - yn * yn));\n"
+    "\n"
+    "    float sinLat = yn * cos(u_cLatR) + z * sin(u_cLatR);\n"
+    "    float cosLat = sqrt(max(0.0, 1.0 - sinLat * sinLat));\n"
+    "    float lon = u_cLonR + atan(xn, z * cos(u_cLatR) - yn * sin(u_cLatR));\n"
+    "    float cosA = sin(u_sunLatR) * sinLat + cos(u_sunLatR) * cosLat * cos(lon - u_sunLonR);\n"
+    "\n"
+    "    vec3 sc = u_sunColor.rgb;\n"
+    "    vec3 nightOcean = vec3(0.03, 0.05, 0.08) + sc * 0.04;\n"
+    "    if (u_nightColor.a > 0.0) {\n"
+    "        nightOcean = mix(nightOcean, u_nightColor.rgb, u_nightColor.a);\n"
+    "    }\n"
+    "    vec3 dayOcean = vec3(0.08, 0.12, 0.16) + sc * 0.22;\n"
+    "    if (u_oceanColor.a > 0.0) {\n"
+    "        dayOcean = mix(dayOcean, u_oceanColor.rgb, 0.35);\n"
+    "    }\n"
+    "\n"
+    "    float dayT = clamp((cosA + 0.08) / 0.16, 0.0, 1.0);\n"
+    "    vec3 col = mix(nightOcean, dayOcean, dayT);\n"
+    "\n"
+    "    if (cosA > 0.0) {\n"
+    "        float sunDiff = pow(cosA, 0.70) * 0.28;\n"
+    "        col += vec3(sunDiff * 0.95, sunDiff * 1.0, sunDiff * 0.92);\n"
+    "    }\n"
+    "\n"
+    "    float twilight = exp(-pow(cosA / 0.07, 2.0)) * 0.10;\n"
+    "    col += vec3(twilight * 1.0, twilight * 0.55, twilight * 0.15);\n"
+    "\n"
+    "    float rim = 1.0 - z;\n"
+    "    float atmo = pow(rim, 3.0) * 0.35;\n"
+    "    col += sc * atmo;\n"
+    "\n"
+    "    gl_FragColor = vec4(col, edgeAlpha);\n"
+    "}\n";
+
+static const char *LINE_VERT =
+    "attribute vec2 a_geo;\n"
+    "uniform float u_cLatR;\n"
+    "uniform float u_cLonR;\n"
+    "uniform float u_R;\n"
+    "uniform vec2 u_cx_cy;\n"
+    "uniform vec2 u_resolution;\n"
+    "varying float v_z;\n"
+    "void main() {\n"
+    "    float sinCLat = sin(u_cLatR), cosCLat = cos(u_cLatR);\n"
+    "    float sinLat = sin(a_geo.y), cosLat = cos(a_geo.y);\n"
+    "    float dLon = a_geo.x - u_cLonR;\n"
+    "    float x = u_R * cosLat * sin(dLon);\n"
+    "    float y = u_R * (cosCLat * sinLat - sinCLat * cosLat * cos(dLon));\n"
+    "    float z = sinCLat * sinLat + cosCLat * cosLat * cos(dLon);\n"
+    "    v_z = z;\n"
+    "    gl_Position = vec4(\n"
+    "        (u_cx_cy.x + x) / u_resolution.x * 2.0 - 1.0,\n"
+    "        1.0 - (u_cx_cy.y - y) / u_resolution.y * 2.0,\n"
+    "        0.0, 1.0\n"
+    "    );\n"
+    "}\n";
+
+static const char *LINE_FRAG =
+    "precision mediump float;\n"
+    "uniform vec4 u_color;\n"
+    "varying float v_z;\n"
+    "void main() {\n"
+    "    if (v_z < 0.0) discard;\n"
+    "    gl_FragColor = u_color;\n"
+    "}\n";
+
+static const char *RING_VERT =
+    "attribute vec2 a_pos;\n"
+    "uniform vec2 u_cx_cy;\n"
+    "uniform float u_R;\n"
+    "uniform float u_ringWidth;\n"
+    "uniform vec2 u_resolution;\n"
+    "varying float v_dist;\n"
+    "void main() {\n"
+    "    float outerR = u_R + u_ringWidth * 0.5;\n"
+    "    vec2 pos = u_cx_cy + a_pos * outerR;\n"
+    "    v_dist = length(a_pos) * outerR;\n"
+    "    gl_Position = vec4(\n"
+    "        pos.x / u_resolution.x * 2.0 - 1.0,\n"
+    "        1.0 - pos.y / u_resolution.y * 2.0,\n"
+    "        0.0, 1.0\n"
+    "    );\n"
+    "}\n";
+
+static const char *RING_FRAG =
+    "precision mediump float;\n"
+    "uniform float u_R;\n"
+    "uniform float u_ringWidth;\n"
+    "uniform vec4 u_color;\n"
+    "varying float v_dist;\n"
+    "void main() {\n"
+    "    float inner = u_R - u_ringWidth * 0.5;\n"
+    "    float outer = u_R + u_ringWidth * 0.5;\n"
+    "    if (v_dist < inner || v_dist > outer) discard;\n"
+    "    gl_FragColor = u_color;\n"
+    "}\n";
+
 
 GlobeItem::GlobeItem(QQuickItem *parent)
-    : QQuickFramebufferObject(parent)
+    : QQuickPaintedItem(parent)
+    , m_coastVbo(QOpenGLBuffer::VertexBuffer)
+    , m_borderVbo(QOpenGLBuffer::VertexBuffer)
+    , m_quadVbo(QOpenGLBuffer::VertexBuffer)
+    , m_ringVbo(QOpenGLBuffer::VertexBuffer)
 {
     setFlag(ItemHasContents, true);
-    m_oceanColor = QColor(15, 20, 35, 180); // semi-transparent ocean
-    m_nightColor = QColor(0, 0, 0, 115); // ~0.45 alpha
+    setFillColor(Qt::transparent);
+    m_oceanColor = QColor(15, 20, 35);
+    m_nightColor = QColor(0, 0, 0, 115);
     m_coastColor = QColor(80, 140, 200);
-    m_borderColor = QColor(80, 140, 200, 89); // ~0.35 alpha
-    m_ringColor = QColor(80, 140, 200, 102);  // ~0.4 alpha
+    m_borderColor = QColor(80, 140, 200, 89);
+    m_ringColor = QColor(80, 140, 200, 102);
+    m_sunColor = QColor();
     updateSunPosition();
-
-    // Refresh timer to keep FBO alive and sun position current
-    QTimer *refreshTimer = new QTimer(this);
-    connect(refreshTimer, &QTimer::timeout, this, [this]() {
-        updateSunPosition();
-        update();
-    });
-    refreshTimer->start(60000);
+    QTimer *t = new QTimer(this);
+    connect(t, &QTimer::timeout, this, [this]() { updateSunPosition(); update(); });
+    t->start(60000);
 }
 
-QQuickFramebufferObject::Renderer *GlobeItem::createRenderer() const
+GlobeItem::~GlobeItem()
 {
-    return new GlobeRenderer();
+    delete m_globeProg; delete m_lineProg; delete m_ringProg;
+    delete[] m_coastOffsets; delete[] m_borderOffsets;
+    delete m_fbo; delete m_glCtx; delete m_surface;
 }
 
-double GlobeItem::radius() const
-{
-    return qMin(width(), height()) / 2.0 - 4.0; // GLOBE_MARGIN = 4
-}
+double GlobeItem::radius() const { return qMin(width(), height()) / 2.0 - 4.0; }
 
-void GlobeItem::setCenterLatitude(double lat)
-{
+void GlobeItem::setCenterLatitude(double lat) {
     lat = qBound(-90.0, lat, 90.0);
     if (qFuzzyCompare(m_centerLat, lat)) return;
-    m_centerLat = lat;
-    emit centerLatitudeChanged();
-    update();
+    m_centerLat = lat; emit centerLatitudeChanged(); update();
 }
-
-void GlobeItem::setCenterLongitude(double lon)
-{
-    while (lon > 180) lon -= 360;
-    while (lon < -180) lon += 360;
+void GlobeItem::setCenterLongitude(double lon) {
+    while (lon > 180) { lon -= 360; }
+    while (lon < -180) { lon += 360; }
     if (qFuzzyCompare(m_centerLon, lon)) return;
-    m_centerLon = lon;
-    emit centerLongitudeChanged();
-    update();
+    m_centerLon = lon; emit centerLongitudeChanged(); update();
+}
+void GlobeItem::setOceanColor(const QColor &c)   { if (m_oceanColor != c)  { m_oceanColor = c;  emit oceanColorChanged();  update(); } }
+void GlobeItem::setNightColor(const QColor &c)    { if (m_nightColor != c)  { m_nightColor = c;  emit nightColorChanged();  update(); } }
+void GlobeItem::setCoastColor(const QColor &c)    { if (m_coastColor != c)  { m_coastColor = c;  emit coastColorChanged();  update(); } }
+void GlobeItem::setBorderColor(const QColor &c)   { if (m_borderColor != c) { m_borderColor = c; emit borderColorChanged(); update(); } }
+void GlobeItem::setRingColor(const QColor &c)     { if (m_ringColor != c)   { m_ringColor = c;   emit ringColorChanged();   update(); } }
+void GlobeItem::setSunColor(const QColor &c)      { if (m_sunColor != c)    { m_sunColor = c;    emit sunColorChanged();    update(); } }
+
+void GlobeItem::geometryChanged(const QRectF &n, const QRectF &o) {
+    QQuickPaintedItem::geometryChanged(n, o); emit radiusChanged(); update();
 }
 
-void GlobeItem::setOceanColor(const QColor &c)
-{
-    if (m_oceanColor == c) return;
-    m_oceanColor = c;
-    emit oceanColorChanged();
-    update();
-}
-
-void GlobeItem::setNightColor(const QColor &c)
-{
-    if (m_nightColor == c) return;
-    m_nightColor = c;
-    emit nightColorChanged();
-    update();
-}
-
-void GlobeItem::setCoastColor(const QColor &c)
-{
-    if (m_coastColor == c) return;
-    m_coastColor = c;
-    emit coastColorChanged();
-    update();
-}
-
-void GlobeItem::setBorderColor(const QColor &c)
-{
-    if (m_borderColor == c) return;
-    m_borderColor = c;
-    emit borderColorChanged();
-    update();
-}
-
-void GlobeItem::setRingColor(const QColor &c)
-{
-    if (m_ringColor == c) return;
-    m_ringColor = c;
-    emit ringColorChanged();
-    update();
-}
-
-void GlobeItem::geometryChanged(const QRectF &newGeom, const QRectF &oldGeom)
-{
-    QQuickFramebufferObject::geometryChanged(newGeom, oldGeom);
-    emit radiusChanged();
-    update();
-}
-
-void GlobeItem::updateSunPosition()
-{
-    // NOAA subsolar point approximation
+void GlobeItem::updateSunPosition() {
     QDateTime now = QDateTime::currentDateTimeUtc();
-    QDate date = now.date();
-    QTime time = now.time();
-    int dayOfYear = date.dayOfYear();
-    double hour = time.hour() + time.minute() / 60.0 + time.second() / 3600.0;
+    int doy = now.date().dayOfYear();
+    double hour = now.time().hour() + now.time().minute() / 60.0 + now.time().second() / 3600.0;
+    double g = 2.0 * M_PI / 365.0 * (doy - 1);
+    double decl = 0.006918 - 0.399912*cos(g) + 0.070257*sin(g) - 0.006758*cos(2*g) + 0.000907*sin(2*g) - 0.002697*cos(3*g) + 0.00148*sin(3*g);
+    double eq = 229.18 * (0.000075 + 0.001868*cos(g) - 0.032077*sin(g) - 0.014615*cos(2*g) - 0.04089*sin(2*g));
+    double nlon = -((hour - 12.0) * 15.0 + eq / 4.0);
+    while (nlon > 180) { nlon -= 360; }
+    while (nlon < -180) { nlon += 360; }
+    double nlat = decl * 180.0 / M_PI;
+    if (!qFuzzyCompare(m_sunLat, nlat) || !qFuzzyCompare(m_sunLon, nlon)) {
+        m_sunLat = nlat; m_sunLon = nlon; emit sunChanged(); update();
+    }
+}
 
-    // Solar declination
-    double gamma = 2.0 * M_PI / 365.0 * (dayOfYear - 1);
-    double decl = 0.006918 - 0.399912 * cos(gamma) + 0.070257 * sin(gamma)
-                - 0.006758 * cos(2 * gamma) + 0.000907 * sin(2 * gamma)
-                - 0.002697 * cos(3 * gamma) + 0.00148 * sin(3 * gamma);
+void GlobeItem::initGl() {
+    if (m_glReady) return;
+    m_surface = new QOffscreenSurface; m_surface->create();
+    m_glCtx = new QOpenGLContext;
+    if (window() && window()->openglContext()) m_glCtx->setShareContext(window()->openglContext());
+    m_glCtx->setFormat(m_surface->requestedFormat()); m_glCtx->create();
+    m_glCtx->makeCurrent(m_surface); initializeOpenGLFunctions();
 
-    // Equation of time (minutes)
-    double eqTime = 229.18 * (0.000075 + 0.001868 * cos(gamma) - 0.032077 * sin(gamma)
-                   - 0.014615 * cos(2 * gamma) - 0.04089 * sin(2 * gamma));
+    static const float q[] = {-1,-1, 1,-1, -1,1, 1,-1, 1,1, -1,1};
+    m_quadVbo.create(); m_quadVbo.bind(); m_quadVbo.allocate(q, sizeof(q)); m_quadVbo.release();
 
-    double newLon = -((hour - 12.0) * 15.0 + eqTime / 4.0);
-    while (newLon > 180) newLon -= 360;
-    while (newLon < -180) newLon += 360;
+    m_ringVertexCount = 128;
+    QVector<float> rd;
+    for (int i = 0; i <= m_ringVertexCount; i++) {
+        float a = 2.0f * float(M_PI) * i / m_ringVertexCount;
+        rd << cosf(a) << sinf(a);
+    }
+    m_ringVbo.create(); m_ringVbo.bind(); m_ringVbo.allocate(rd.constData(), rd.size()*sizeof(float)); m_ringVbo.release();
 
-    double newLat = decl * 180.0 / M_PI;
+    m_globeProg = new QOpenGLShaderProgram;
+    m_globeProg->addShaderFromSourceCode(QOpenGLShader::Vertex, GLOBE_VERT);
+    m_globeProg->addShaderFromSourceCode(QOpenGLShader::Fragment, GLOBE_FRAG);
+    m_globeProg->link();
 
-    if (!qFuzzyCompare(m_sunLat, newLat) || !qFuzzyCompare(m_sunLon, newLon)) {
-        m_sunLat = newLat;
-        m_sunLon = newLon;
-        emit sunChanged();
-        update();
+    m_lineProg = new QOpenGLShaderProgram;
+    m_lineProg->addShaderFromSourceCode(QOpenGLShader::Vertex, LINE_VERT);
+    m_lineProg->addShaderFromSourceCode(QOpenGLShader::Fragment, LINE_FRAG);
+    m_lineProg->link();
+
+    m_ringProg = new QOpenGLShaderProgram;
+    m_ringProg->addShaderFromSourceCode(QOpenGLShader::Vertex, RING_VERT);
+    m_ringProg->addShaderFromSourceCode(QOpenGLShader::Fragment, RING_FRAG);
+    m_ringProg->link();
+
+    using namespace GeomData;
+    m_coastSegCount = COAST_SEGMENT_COUNT;
+    m_coastOffsets = new int[m_coastSegCount + 1];
+    for (int i = 0; i <= m_coastSegCount; i++) m_coastOffsets[i] = COAST_OFFSETS[i];
+    int cf = m_coastOffsets[m_coastSegCount] * 2;
+    float *cr = new float[cf];
+    for (int i = 0; i < cf; i += 2) { cr[i] = COAST_DATA[i] * float(M_PI/180.0); cr[i+1] = COAST_DATA[i+1] * float(M_PI/180.0); }
+    m_coastVbo.create(); m_coastVbo.bind(); m_coastVbo.allocate(cr, cf*sizeof(float)); m_coastVbo.release(); delete[] cr;
+
+    m_borderSegCount = BORDER_SEGMENT_COUNT;
+    m_borderOffsets = new int[m_borderSegCount + 1];
+    for (int i = 0; i <= m_borderSegCount; i++) m_borderOffsets[i] = BORDER_OFFSETS[i];
+    int bf = m_borderOffsets[m_borderSegCount] * 2;
+    float *br = new float[bf];
+    for (int i = 0; i < bf; i += 2) { br[i] = BORDER_DATA[i] * float(M_PI/180.0); br[i+1] = BORDER_DATA[i+1] * float(M_PI/180.0); }
+    m_borderVbo.create(); m_borderVbo.bind(); m_borderVbo.allocate(br, bf*sizeof(float)); m_borderVbo.release(); delete[] br;
+
+    m_glReady = true;
+}
+
+void GlobeItem::paint(QPainter *painter) {
+    int w = int(width()), h = int(height());
+    if (w <= 0 || h <= 0) return;
+    initGl();
+    m_glCtx->makeCurrent(m_surface);
+    if (!m_fbo || m_fbo->size() != QSize(w, h)) {
+        delete m_fbo;
+        QOpenGLFramebufferObjectFormat fmt;
+        fmt.setAttachment(QOpenGLFramebufferObject::CombinedDepthStencil);
+        fmt.setInternalTextureFormat(GL_RGBA);
+        m_fbo = new QOpenGLFramebufferObject(QSize(w, h), fmt);
+    }
+    renderGlobe(w, h);
+
+    m_fbo->bind();
+    int bpl = w * 4;
+    QByteArray raw(bpl * h, Qt::Uninitialized);
+    glReadPixels(0, 0, w, h, GL_RGBA, GL_UNSIGNED_BYTE, raw.data());
+    m_fbo->release();
+
+    QImage img(w, h, QImage::Format_ARGB32);
+    for (int sy = 0; sy < h; sy++) {
+        int gy = h - 1 - sy;
+        const uchar *src = reinterpret_cast<const uchar*>(raw.constData()) + gy * bpl;
+        uchar *dst = img.scanLine(sy);
+        memcpy(dst, src, bpl);
+        for (int x = 0; x < w; x++) { uchar *px = dst + x * 4; qSwap(px[0], px[2]); }
     }
 
-    // Refresh sun position every 60 seconds
-    QTimer::singleShot(60000, this, &GlobeItem::updateSunPosition);
+    painter->setCompositionMode(QPainter::CompositionMode_Source);
+    painter->drawImage(0, 0, img);
+    if (window() && window()->openglContext())
+        window()->openglContext()->makeCurrent(window());
+}
+
+void GlobeItem::renderGlobe(int w, int h) {
+    m_fbo->bind();
+    glViewport(0, 0, w, h);
+    glClearColor(0, 0, 0, 0);
+    glClear(GL_COLOR_BUFFER_BIT);
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+    drawGlobe(w, h);
+
+    m_coastColor.setAlphaF(1.0);
+    drawLines(m_coastVbo, m_coastOffsets, m_coastSegCount, m_coastColor, 1.2f, w, h);
+    drawLines(m_borderVbo, m_borderOffsets, m_borderSegCount, m_borderColor, 0.7f, w, h);
+    drawRing(w, h);
+
+    m_fbo->release();
+}
+
+void GlobeItem::drawGlobe(int w, int h) {
+    m_globeProg->bind();
+    m_quadVbo.bind();
+    int loc = m_globeProg->attributeLocation("a_pos");
+    m_globeProg->enableAttributeArray(loc);
+    m_globeProg->setAttributeBuffer(loc, GL_FLOAT, 0, 2, 2 * sizeof(float));
+
+    float cx = float(w) / 2.0f;
+    float glCy = float(h) - float(h) / 2.0f;
+    m_globeProg->setUniformValue("u_cx_cy", cx, glCy);
+    m_globeProg->setUniformValue("u_R", float(radius()));
+    m_globeProg->setUniformValue("u_cLatR", float(m_centerLat * M_PI / 180.0));
+    m_globeProg->setUniformValue("u_cLonR", float(m_centerLon * M_PI / 180.0));
+    m_globeProg->setUniformValue("u_sunLatR", float(m_sunLat * M_PI / 180.0));
+    m_globeProg->setUniformValue("u_sunLonR", float(m_sunLon * M_PI / 180.0));
+    m_globeProg->setUniformValue("u_oceanColor", float(m_oceanColor.redF()), float(m_oceanColor.greenF()), float(m_oceanColor.blueF()), float(m_oceanColor.alphaF()));
+    m_globeProg->setUniformValue("u_nightColor", float(m_nightColor.redF()), float(m_nightColor.greenF()), float(m_nightColor.blueF()), float(m_nightColor.alphaF()));
+    QColor sc = m_sunColor.isValid() ? m_sunColor : m_coastColor;
+    m_globeProg->setUniformValue("u_sunColor", float(sc.redF()), float(sc.greenF()), float(sc.blueF()), float(sc.alphaF()));
+
+    glDrawArrays(GL_TRIANGLES, 0, 6);
+    m_globeProg->disableAttributeArray(loc);
+    m_quadVbo.release();
+    m_globeProg->release();
+}
+
+void GlobeItem::drawLines(QOpenGLBuffer &vbo, int *offsets, int segCount,
+                           const QColor &color, float lw, int w, int h) {
+    m_lineProg->bind(); vbo.bind();
+    int loc = m_lineProg->attributeLocation("a_geo");
+    m_lineProg->enableAttributeArray(loc);
+    m_lineProg->setAttributeBuffer(loc, GL_FLOAT, 0, 2, 2 * sizeof(float));
+    float cx = float(w)/2.0f, cy = float(h)/2.0f, res[2] = {float(w), float(h)};
+    m_lineProg->setUniformValue("u_cLatR", float(m_centerLat * M_PI / 180.0));
+    m_lineProg->setUniformValue("u_cLonR", float(m_centerLon * M_PI / 180.0));
+    m_lineProg->setUniformValue("u_R", float(radius()));
+    m_lineProg->setUniformValue("u_cx_cy", cx, cy);
+    m_lineProg->setUniformValueArray("u_resolution", res, 1, 2);
+    m_lineProg->setUniformValue("u_color", float(color.redF()), float(color.greenF()), float(color.blueF()), float(color.alphaF()));
+    glLineWidth(lw);
+    for (int s = 0; s < segCount; s++) {
+        int start = offsets[s], count = offsets[s+1] - start;
+        if (count >= 2) glDrawArrays(GL_LINE_STRIP, start, count);
+    }
+    m_lineProg->disableAttributeArray(loc); vbo.release(); m_lineProg->release();
+}
+
+void GlobeItem::drawRing(int w, int h) {
+    m_ringProg->bind(); m_ringVbo.bind();
+    int loc = m_ringProg->attributeLocation("a_pos");
+    m_ringProg->enableAttributeArray(loc);
+    m_ringProg->setAttributeBuffer(loc, GL_FLOAT, 0, 2, 2 * sizeof(float));
+    float cx = float(w)/2.0f, cy = float(h)/2.0f, res[2] = {float(w), float(h)};
+    m_ringProg->setUniformValue("u_cx_cy", cx, cy);
+    m_ringProg->setUniformValue("u_R", float(radius()));
+    m_ringProg->setUniformValue("u_ringWidth", 1.5f);
+    m_ringProg->setUniformValueArray("u_resolution", res, 1, 2);
+    QColor rc = m_ringColor;
+    m_ringProg->setUniformValue("u_color", float(rc.redF()), float(rc.greenF()), float(rc.blueF()), float(rc.alphaF()));
+    glDrawArrays(GL_LINE_STRIP, 0, m_ringVertexCount + 1);
+    m_ringProg->disableAttributeArray(loc); m_ringVbo.release(); m_ringProg->release();
 }

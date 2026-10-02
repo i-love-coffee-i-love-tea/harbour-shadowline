@@ -5,12 +5,10 @@ QT += quick qml positioning
 
 SOURCES += \
     src/main.cpp \
-    src/globeitem.cpp \
-    src/globerenderer.cpp
+    src/globeitem.cpp
 
 HEADERS += \
     src/globeitem.h \
-    src/globerenderer.h \
     src/geomdata.h
 
 OTHER_FILES += \
