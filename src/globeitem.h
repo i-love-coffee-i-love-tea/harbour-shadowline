@@ -66,6 +66,7 @@ protected:
 
 private:
     void initGl();
+    void teardownGl();
     void renderGlobe(int w, int h);
     void drawGlobe(int w, int h);
     void drawLines(QOpenGLBuffer &vbo, int *offsets, int segCount,
@@ -75,6 +76,7 @@ private:
 
     std::unique_ptr<QOffscreenSurface> m_surface;
     std::unique_ptr<QOpenGLContext> m_glCtx;
+    QOpenGLContext *m_sharedCtx = nullptr; // non-owning, tracks window context
     std::unique_ptr<QOpenGLFramebufferObject> m_fbo;
 
     std::unique_ptr<QOpenGLShaderProgram> m_globeProg;

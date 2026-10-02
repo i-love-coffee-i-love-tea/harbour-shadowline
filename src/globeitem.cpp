@@ -214,7 +214,8 @@ void GlobeItem::initGl() {
     if (m_glReady) return;
     m_surface.reset(new QOffscreenSurface); m_surface->create();
     m_glCtx.reset(new QOpenGLContext);
-    if (window() && window()->openglContext()) m_glCtx->setShareContext(window()->openglContext());
+    m_sharedCtx = window() ? window()->openglContext() : nullptr;
+    if (m_sharedCtx) m_glCtx->setShareContext(m_sharedCtx);
     m_glCtx->setFormat(m_surface->requestedFormat()); m_glCtx->create();
     m_glCtx->makeCurrent(m_surface.get()); initializeOpenGLFunctions();
 
@@ -273,12 +274,38 @@ void GlobeItem::initGl() {
     m_glReady = true;
 }
 
+void GlobeItem::teardownGl() {
+    if (m_glCtx) m_glCtx->makeCurrent(m_surface.get());
+    m_fbo.reset();
+    m_globeProg.reset();
+    m_lineProg.reset();
+    m_ringProg.reset();
+    m_coastOffsets.reset();
+    m_borderOffsets.reset();
+    if (m_coastVbo.isCreated()) m_coastVbo.destroy();
+    if (m_borderVbo.isCreated()) m_borderVbo.destroy();
+    if (m_quadVbo.isCreated()) m_quadVbo.destroy();
+    if (m_ringVbo.isCreated()) m_ringVbo.destroy();
+    m_glCtx.reset();
+    m_surface.reset();
+    m_sharedCtx = nullptr;
+    m_glReady = false;
+}
+
 void GlobeItem::paint(QPainter *painter) {
     int w = int(width()), h = int(height());
     if (w <= 0 || h <= 0) return;
     initGl();
     if (!m_glReady) return;
-    m_glCtx->makeCurrent(m_surface.get());
+    // Reinitialize if the window's GL context changed (e.g. returning from background)
+    // or if our offscreen context is no longer usable.
+    QOpenGLContext *winCtx = window() ? window()->openglContext() : nullptr;
+    if (winCtx != m_sharedCtx || !m_glCtx->makeCurrent(m_surface.get())) {
+        teardownGl();
+        initGl();
+        if (!m_glReady) return;
+        m_glCtx->makeCurrent(m_surface.get());
+    }
     if (!m_fbo || m_fbo->size() != QSize(w, h)) {
         QOpenGLFramebufferObjectFormat fmt;
         fmt.setAttachment(QOpenGLFramebufferObject::CombinedDepthStencil);
