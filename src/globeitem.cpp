@@ -275,7 +275,9 @@ void GlobeItem::initGl() {
 }
 
 void GlobeItem::teardownGl() {
-    if (m_glCtx) m_glCtx->makeCurrent(m_surface.get());
+    // Only makeCurrent if the context and surface are still valid
+    if (m_glCtx && m_surface && m_glCtx->isValid())
+        m_glCtx->makeCurrent(m_surface.get());
     m_fbo.reset();
     m_globeProg.reset();
     m_lineProg.reset();
@@ -335,11 +337,15 @@ void GlobeItem::paint(QPainter *painter) {
 
     painter->setCompositionMode(QPainter::CompositionMode_Source);
     painter->drawImage(0, 0, img);
-    if (window() && window()->openglContext())
-        window()->openglContext()->makeCurrent(window());
+    // Restore the scene graph's GL context if it's still the one we expect
+    QOpenGLContext *curWin = window() ? window()->openglContext() : nullptr;
+    if (curWin && curWin == winCtx)
+        curWin->makeCurrent(window());
 }
 
 void GlobeItem::renderGlobe(int w, int h) {
+    if (!m_fbo || !m_globeProg || !m_lineProg || !m_ringProg) return;
+    if (!m_coastOffsets || !m_borderOffsets) return;
     m_fbo->bind();
     glViewport(0, 0, w, h);
     glClearColor(0, 0, 0, 0);
