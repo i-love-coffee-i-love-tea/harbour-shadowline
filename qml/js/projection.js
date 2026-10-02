@@ -26,5 +26,9 @@ function project(lat, lon, centerLat, centerLon, radius, cx, cy) {
     var y = radius * (Math.cos(cLatR) * Math.sin(latR)
                     - Math.sin(cLatR) * Math.cos(latR) * Math.cos(dLon));
 
-    return { x: cx + x, y: cy - y, visible: true };
+    var nx = Math.cos(latR) * Math.sin(dLon);
+    var ny = Math.cos(cLatR) * Math.sin(latR)
+           - Math.sin(cLatR) * Math.cos(latR) * Math.cos(dLon);
+
+    return { x: cx + x, y: cy - y, visible: true, nx: nx, ny: ny, nz: cosc };
 }

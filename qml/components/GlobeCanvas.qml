@@ -94,33 +94,67 @@ Item {
         }
 
         function _drawLocationMarkers(ctx, locs, cLat, cLon, R, cx, cy) {
+            var hc = Theme.highlightColor;
             for (var li = 0; li < locs.length; li++) {
+                var isSel = (globe.hasSelection &&
+                             Math.abs(locs[li].lat - globe.selectedLat) < 0.001 &&
+                             Math.abs(locs[li].lon - globe.selectedLon) < 0.001);
+                if (isSel) continue;
+
                 var lp = Proj.project(locs[li].lat, locs[li].lon, cLat, cLon, R, cx, cy);
                 if (!lp) continue;
+
+                var scale = 0.08;
+                var tipX = lp.x + scale * (lp.x - cx);
+                var tipY = lp.y + scale * (lp.y - cy);
+                var stemLen = Math.sqrt((tipX - lp.x) * (tipX - lp.x) + (tipY - lp.y) * (tipY - lp.y));
+
                 ctx.beginPath();
-                ctx.arc(lp.x, lp.y, Const.LOC_OUTER_GLOW_RADIUS, 0, Math.PI * 2);
-                ctx.fillStyle = "rgba(255, 255, 255, " + Const.LOC_OUTER_GLOW_ALPHA + ")";
-                ctx.fill();
-                ctx.beginPath();
-                ctx.arc(lp.x, lp.y, Const.LOC_INNER_GLOW_RADIUS, 0, Math.PI * 2);
-                ctx.fillStyle = "rgba(255, 255, 255, " + Const.LOC_INNER_GLOW_ALPHA + ")";
-                ctx.fill();
-                ctx.beginPath();
-                ctx.arc(lp.x + Const.LOC_SHADOW_OFFSET, lp.y + Const.LOC_SHADOW_OFFSET,
-                        Const.LOC_SHADOW_RADIUS, 0, Math.PI * 2);
-                ctx.fillStyle = "rgba(0, 0, 0, " + Const.LOC_SHADOW_ALPHA + ")";
-                ctx.fill();
-                ctx.beginPath();
-                ctx.arc(lp.x, lp.y, Const.LOC_DOT_RADIUS, 0, Math.PI * 2);
-                ctx.fillStyle = Theme.highlightColor;
-                ctx.fill();
-                ctx.lineWidth = Const.LOC_RING_LINE_WIDTH;
-                ctx.strokeStyle = "rgba(255, 255, 255, " + Const.LOC_RING_ALPHA + ")";
+                ctx.arc(lp.x, lp.y, 2.8, 0, Math.PI * 2);
+                ctx.strokeStyle = "rgba(255, 255, 255, 0.65)";
+                ctx.lineWidth = 1.0;
                 ctx.stroke();
+
                 ctx.beginPath();
-                ctx.arc(lp.x - Const.LOC_SPECULAR_OFFSET, lp.y - Const.LOC_SPECULAR_OFFSET,
-                        Const.LOC_SPECULAR_RADIUS, 0, Math.PI * 2);
-                ctx.fillStyle = "rgba(255, 255, 255, " + Const.LOC_SPECULAR_ALPHA + ")";
+                ctx.arc(lp.x, lp.y, 1.2, 0, Math.PI * 2);
+                ctx.fillStyle = "rgba(255, 255, 255, 0.9)";
+                ctx.fill();
+
+                if (stemLen > 1.0) {
+                    ctx.beginPath();
+                    ctx.moveTo(lp.x + 1.0, lp.y + 1.0);
+                    ctx.lineTo(tipX + 1.0, tipY + 1.0);
+                    ctx.strokeStyle = "rgba(0, 0, 0, 0.35)";
+                    ctx.lineWidth = 1.5;
+                    ctx.stroke();
+
+                    var stemGrad = ctx.createLinearGradient(lp.x, lp.y, tipX, tipY);
+                    stemGrad.addColorStop(0, Qt.rgba(hc.r, hc.g, hc.b, 0.35));
+                    stemGrad.addColorStop(1, Qt.rgba(hc.r, hc.g, hc.b, 1.0));
+                    ctx.beginPath();
+                    ctx.moveTo(lp.x, lp.y);
+                    ctx.lineTo(tipX, tipY);
+                    ctx.strokeStyle = stemGrad;
+                    ctx.lineWidth = 1.4;
+                    ctx.stroke();
+                }
+
+                ctx.beginPath();
+                ctx.arc(tipX, tipY, 6.0, 0, Math.PI * 2);
+                ctx.fillStyle = Qt.rgba(hc.r, hc.g, hc.b, 0.28);
+                ctx.fill();
+
+                ctx.beginPath();
+                ctx.arc(tipX, tipY, 3.2, 0, Math.PI * 2);
+                ctx.fillStyle = hc;
+                ctx.fill();
+                ctx.lineWidth = 0.8;
+                ctx.strokeStyle = "rgba(255, 255, 255, 0.85)";
+                ctx.stroke();
+
+                ctx.beginPath();
+                ctx.arc(tipX - 1.0, tipY - 1.0, 1.1, 0, Math.PI * 2);
+                ctx.fillStyle = "rgba(255, 255, 255, 0.95)";
                 ctx.fill();
             }
         }
@@ -129,47 +163,60 @@ Item {
             if (!globe.hasSelection) return;
             var sp = Proj.project(globe.selectedLat, globe.selectedLon, cLat, cLon, R, cx, cy);
             if (!sp) return;
-            var rdx = sp.x - cx;
-            var rdy = sp.y - cy;
-            var rdLen = Math.sqrt(rdx * rdx + rdy * rdy);
-            if (rdLen < 1e-6) { rdx = 0; rdy = -1; rdLen = 1; }
-            var rnx = rdx / rdLen;
-            var rny = rdy / rdLen;
-            var pinLen = R * Const.PIN_LENGTH_RATIO;
-            var tipX = sp.x + rnx * pinLen;
-            var tipY = sp.y + rny * pinLen;
 
-            ctx.beginPath();
-            ctx.moveTo(sp.x + Const.PIN_SHADOW_OFFSET, sp.y + Const.PIN_SHADOW_OFFSET);
-            ctx.lineTo(tipX + Const.PIN_SHADOW_OFFSET, tipY + Const.PIN_SHADOW_OFFSET);
-            ctx.strokeStyle = Qt.rgba(0, 0, 0, Const.PIN_SHADOW_ALPHA);
-            ctx.lineWidth = Const.PIN_SHADOW_LINE_WIDTH;
-            ctx.stroke();
-
-            var grad = ctx.createLinearGradient(sp.x, sp.y, tipX, tipY);
             var hc = Theme.highlightColor;
-            grad.addColorStop(0, Qt.rgba(hc.r, hc.g, hc.b, 0.9));
-            grad.addColorStop(1, Qt.rgba(hc.r, hc.g, hc.b, 0.2));
+            var scale = Const.PIN_LENGTH_RATIO;
+            var tipX = sp.x + scale * (sp.x - cx);
+            var tipY = sp.y + scale * (sp.y - cy);
+            var stemLen = Math.sqrt((tipX - sp.x) * (tipX - sp.x) + (tipY - sp.y) * (tipY - sp.y));
+
             ctx.beginPath();
-            ctx.moveTo(sp.x, sp.y);
-            ctx.lineTo(tipX, tipY);
-            ctx.strokeStyle = grad;
-            ctx.lineWidth = Const.PIN_LINE_WIDTH;
+            ctx.arc(sp.x, sp.y, Const.PIN_ANCHOR_RADIUS * 1.6, 0, Math.PI * 2);
+            ctx.strokeStyle = Qt.rgba(hc.r, hc.g, hc.b, 0.4);
+            ctx.lineWidth = 1.0;
             ctx.stroke();
+
+            ctx.beginPath();
+            ctx.arc(sp.x, sp.y, Const.PIN_ANCHOR_RADIUS, 0, Math.PI * 2);
+            ctx.fillStyle = "rgba(255, 255, 255, 0.9)";
+            ctx.fill();
+
+            if (stemLen > 1.0) {
+                ctx.beginPath();
+                ctx.moveTo(sp.x + Const.PIN_SHADOW_OFFSET, sp.y + Const.PIN_SHADOW_OFFSET);
+                ctx.lineTo(tipX + Const.PIN_SHADOW_OFFSET, tipY + Const.PIN_SHADOW_OFFSET);
+                ctx.strokeStyle = Qt.rgba(0, 0, 0, Const.PIN_SHADOW_ALPHA);
+                ctx.lineWidth = Const.PIN_SHADOW_LINE_WIDTH;
+                ctx.stroke();
+
+                var grad = ctx.createLinearGradient(sp.x, sp.y, tipX, tipY);
+                grad.addColorStop(0, Qt.rgba(hc.r, hc.g, hc.b, 0.5));
+                grad.addColorStop(1, Qt.rgba(hc.r, hc.g, hc.b, 1.0));
+                ctx.beginPath();
+                ctx.moveTo(sp.x, sp.y);
+                ctx.lineTo(tipX, tipY);
+                ctx.strokeStyle = grad;
+                ctx.lineWidth = Const.PIN_LINE_WIDTH;
+                ctx.stroke();
+            }
+
+            ctx.beginPath();
+            ctx.arc(tipX, tipY, Const.PIN_TIP_RADIUS * 1.8, 0, Math.PI * 2);
+            ctx.fillStyle = Qt.rgba(hc.r, hc.g, hc.b, 0.35);
+            ctx.fill();
 
             ctx.beginPath();
             ctx.arc(tipX, tipY, Const.PIN_TIP_RADIUS, 0, Math.PI * 2);
-            ctx.fillStyle = Theme.highlightColor;
+            ctx.fillStyle = Qt.lighter(hc, 1.3);
             ctx.fill();
+            ctx.lineWidth = 1.0;
+            ctx.strokeStyle = "rgba(255, 255, 255, 0.9)";
+            ctx.stroke();
+
             ctx.beginPath();
             ctx.arc(tipX - Const.PIN_TIP_SPECULAR_OFFSET, tipY - Const.PIN_TIP_SPECULAR_OFFSET,
                     Const.PIN_TIP_SPECULAR_RADIUS, 0, Math.PI * 2);
             ctx.fillStyle = Qt.rgba(1, 1, 1, Const.PIN_TIP_SPECULAR_ALPHA);
-            ctx.fill();
-
-            ctx.beginPath();
-            ctx.arc(sp.x, sp.y, Const.PIN_ANCHOR_RADIUS, 0, Math.PI * 2);
-            ctx.fillStyle = Theme.highlightColor;
             ctx.fill();
         }
 
@@ -187,7 +234,7 @@ Item {
 
             ctx.save();
             ctx.beginPath();
-            ctx.arc(cx, cy, R, 0, Math.PI * 2);
+            ctx.arc(cx, cy, R * 1.25, 0, Math.PI * 2);
             ctx.clip();
 
             _drawSun(ctx, Proj.project(ss.lat, ss.lon, cLat, cLon, R, cx, cy));

@@ -70,13 +70,20 @@ static const char *GLOBE_FRAG =
     "}\n";
 
 static const char *LINE_VERT =
+    "#ifdef GL_ES\n"
+    "precision mediump float;\n"
+    "#endif\n"
     "attribute vec2 a_geo;\n"
     "uniform float u_cLatR;\n"
     "uniform float u_cLonR;\n"
+    "uniform float u_sunLatR;\n"
+    "uniform float u_sunLonR;\n"
     "uniform float u_R;\n"
     "uniform vec2 u_cx_cy;\n"
     "uniform vec2 u_resolution;\n"
+    "uniform vec2 u_offset;\n"
     "varying float v_z;\n"
+    "varying float v_cosA;\n"
     "void main() {\n"
     "    float sinCLat = sin(u_cLatR), cosCLat = cos(u_cLatR);\n"
     "    float sinLat = sin(a_geo.y), cosLat = cos(a_geo.y);\n"
@@ -85,20 +92,28 @@ static const char *LINE_VERT =
     "    float y = u_R * (cosCLat * sinLat - sinCLat * cosLat * cos(dLon));\n"
     "    float z = sinCLat * sinLat + cosCLat * cosLat * cos(dLon);\n"
     "    v_z = z;\n"
+    "    v_cosA = sin(u_sunLatR) * sinLat + cos(u_sunLatR) * cosLat * cos(a_geo.x - u_sunLonR);\n"
     "    gl_Position = vec4(\n"
-    "        (u_cx_cy.x + x) / u_resolution.x * 2.0 - 1.0,\n"
-    "        1.0 - (u_cx_cy.y - y) / u_resolution.y * 2.0,\n"
+    "        (u_cx_cy.x + x + u_offset.x) / u_resolution.x * 2.0 - 1.0,\n"
+    "        1.0 - (u_cx_cy.y - y - u_offset.y) / u_resolution.y * 2.0,\n"
     "        0.0, 1.0\n"
     "    );\n"
     "}\n";
 
 static const char *LINE_FRAG =
+    "#ifdef GL_ES\n"
     "precision mediump float;\n"
+    "#endif\n"
     "uniform vec4 u_color;\n"
     "varying float v_z;\n"
+    "varying float v_cosA;\n"
     "void main() {\n"
     "    if (v_z < 0.0) discard;\n"
-    "    gl_FragColor = u_color;\n"
+    "    float dayFactor = clamp((v_cosA + 0.06) / 0.14, 0.0, 1.0);\n"
+    "    vec3 dayColor = vec3(0.01, 0.03, 0.05);\n"
+    "    vec3 rgb = mix(u_color.rgb, dayColor, dayFactor);\n"
+    "    float alpha = mix(u_color.a, 1.0, dayFactor);\n"
+    "    gl_FragColor = vec4(rgb, alpha);\n"
     "}\n";
 
 static const char *RING_VERT =
@@ -301,8 +316,8 @@ void GlobeItem::renderGlobe(int w, int h) {
     drawGlobe(w, h);
 
     m_coastColor.setAlphaF(1.0);
-    drawLines(m_coastVbo, m_coastOffsets, m_coastSegCount, m_coastColor, 1.2f, w, h);
-    drawLines(m_borderVbo, m_borderOffsets, m_borderSegCount, m_borderColor, 0.7f, w, h);
+    drawLines(m_coastVbo, m_coastOffsets, m_coastSegCount, m_coastColor, 1.4f, w, h);
+    drawLines(m_borderVbo, m_borderOffsets, m_borderSegCount, m_borderColor, 1.1f, w, h);
     drawRing(w, h);
 
     m_fbo->release();
@@ -343,15 +358,26 @@ void GlobeItem::drawLines(QOpenGLBuffer &vbo, int *offsets, int segCount,
     float cx = float(w)/2.0f, cy = float(h)/2.0f, res[2] = {float(w), float(h)};
     m_lineProg->setUniformValue("u_cLatR", float(m_centerLat * M_PI / 180.0));
     m_lineProg->setUniformValue("u_cLonR", float(m_centerLon * M_PI / 180.0));
+    m_lineProg->setUniformValue("u_sunLatR", float(m_sunLat * M_PI / 180.0));
+    m_lineProg->setUniformValue("u_sunLonR", float(m_sunLon * M_PI / 180.0));
     m_lineProg->setUniformValue("u_R", float(radius()));
     m_lineProg->setUniformValue("u_cx_cy", cx, cy);
     m_lineProg->setUniformValueArray("u_resolution", res, 1, 2);
     m_lineProg->setUniformValue("u_color", float(color.redF()), float(color.greenF()), float(color.blueF()), float(color.alphaF()));
     glLineWidth(lw);
-    for (int s = 0; s < segCount; s++) {
-        int start = offsets[s], count = offsets[s+1] - start;
-        if (count >= 2) glDrawArrays(GL_LINE_STRIP, start, count);
+
+    static const float offsetsX[] = { 0.0f, 0.7f, -0.7f, 0.0f,  0.0f };
+    static const float offsetsY[] = { 0.0f, 0.0f,  0.0f, 0.7f, -0.7f };
+    int passes = (lw > 1.0f) ? 5 : 1;
+
+    for (int p = 0; p < passes; p++) {
+        m_lineProg->setUniformValue("u_offset", offsetsX[p], offsetsY[p]);
+        for (int s = 0; s < segCount; s++) {
+            int start = offsets[s], count = offsets[s+1] - start;
+            if (count >= 2) glDrawArrays(GL_LINE_STRIP, start, count);
+        }
     }
+
     m_lineProg->disableAttributeArray(loc); vbo.release(); m_lineProg->release();
 }
 
