@@ -1,15 +1,9 @@
 #pragma once
 
-#include <memory>
-#include <QQuickPaintedItem>
-#include <QOpenGLShaderProgram>
-#include <QOpenGLFunctions>
-#include <QOpenGLBuffer>
-#include <QOpenGLFramebufferObject>
-#include <QOffscreenSurface>
-#include <QOpenGLContext>
+#include <QQuickFramebufferObject>
+#include <QColor>
 
-class GlobeItem : public QQuickPaintedItem, protected QOpenGLFunctions {
+class GlobeItem : public QQuickFramebufferObject {
     Q_OBJECT
     Q_PROPERTY(double centerLatitude READ centerLatitude WRITE setCenterLatitude NOTIFY centerLatitudeChanged)
     Q_PROPERTY(double centerLongitude READ centerLongitude WRITE setCenterLongitude NOTIFY centerLongitudeChanged)
@@ -25,8 +19,9 @@ class GlobeItem : public QQuickPaintedItem, protected QOpenGLFunctions {
 
 public:
     explicit GlobeItem(QQuickItem *parent = nullptr);
-    ~GlobeItem() override;
-    void paint(QPainter *painter) override;
+    ~GlobeItem() override = default;
+
+    Renderer *createRenderer() const override;
 
     double centerLatitude() const { return m_centerLat; }
     double centerLongitude() const { return m_centerLon; }
@@ -65,36 +60,7 @@ protected:
     void geometryChanged(const QRectF &newGeom, const QRectF &oldGeom) override;
 
 private:
-    void initGl();
-    void teardownGl();
-    void renderGlobe(int w, int h);
-    void drawGlobe(int w, int h);
-    void drawLines(QOpenGLBuffer &vbo, int *offsets, int segCount,
-                   const QColor &color, float lineWidth, int w, int h);
-    void drawRing(int w, int h);
     void updateSunPosition();
-
-    std::unique_ptr<QOffscreenSurface> m_surface;
-    std::unique_ptr<QOpenGLContext> m_glCtx;
-    QOpenGLContext *m_sharedCtx = nullptr; // non-owning, tracks window context
-    std::unique_ptr<QOpenGLFramebufferObject> m_fbo;
-
-    std::unique_ptr<QOpenGLShaderProgram> m_globeProg;
-    std::unique_ptr<QOpenGLShaderProgram> m_lineProg;
-    std::unique_ptr<QOpenGLShaderProgram> m_ringProg;
-
-    QOpenGLBuffer m_coastVbo;
-    QOpenGLBuffer m_borderVbo;
-    QOpenGLBuffer m_quadVbo;
-    QOpenGLBuffer m_ringVbo;
-
-    std::unique_ptr<int[]> m_coastOffsets;
-    int m_coastSegCount = 0;
-    std::unique_ptr<int[]> m_borderOffsets;
-    int m_borderSegCount = 0;
-    int m_ringVertexCount = 0;
-
-    bool m_glReady = false;
 
     double m_centerLat = 25.0;
     double m_centerLon = 30.0;

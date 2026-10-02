@@ -163,19 +163,30 @@ function saveSetting(key, value) {
 }
 
 function loadCenterLon() {
-    return loadSetting('centerLon', DEFAULT_CENTER_LON);
+    var lon = loadSetting('centerLon', DEFAULT_CENTER_LON);
+    if (isNaN(lon)) lon = DEFAULT_CENTER_LON;
+    while (lon > 180) lon -= 360;
+    while (lon < -180) lon += 360;
+    return lon;
 }
 
 function loadCenterLat() {
-    return loadSetting('centerLat', DEFAULT_CENTER_LAT);
+    var lat = loadSetting('centerLat', DEFAULT_CENTER_LAT);
+    if (isNaN(lat)) lat = DEFAULT_CENTER_LAT;
+    return Math.max(-90.0, Math.min(90.0, lat));
 }
 
 function saveCenterLon(lon) {
+    if (isNaN(lon)) lon = DEFAULT_CENTER_LON;
+    while (lon > 180) lon -= 360;
+    while (lon < -180) lon += 360;
     saveSetting('centerLon', lon);
 }
 
 function saveCenterLat(lat) {
-    saveSetting('centerLat', lat);
+    if (isNaN(lat)) lat = DEFAULT_CENTER_LAT;
+    var clamped = Math.max(-90.0, Math.min(90.0, lat));
+    saveSetting('centerLat', clamped);
 }
 
 function loadCoverLocationId() {

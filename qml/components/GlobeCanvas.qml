@@ -20,7 +20,7 @@ Item {
     property real _spinFrom: 0
     property real spinProgress: isSpinning ? ((centerLongitude - _spinFrom) / 360 % 1 + 1) % 1 : 0
 
-    property real _radius: Math.min(width, height) / 2 - Const.GLOBE_MARGIN
+    property real _radius: Math.max(0, Math.min(width, height) / 2 - Const.GLOBE_MARGIN)
     property real _cx: width / 2
     property real _cy: height / 2
 
@@ -30,6 +30,10 @@ Item {
         property: "centerLongitude"
         duration: 600
         easing.type: Easing.InOutQuad
+        onStopped: {
+            while (globe.centerLongitude > 180) globe.centerLongitude -= 360;
+            while (globe.centerLongitude < -180) globe.centerLongitude += 360;
+        }
     }
 
     NumberAnimation {
@@ -46,6 +50,10 @@ Item {
         property: "centerLongitude"
         duration: 20000
         easing.type: Easing.Linear
+        onStopped: {
+            while (globe.centerLongitude > 180) globe.centerLongitude -= 360;
+            while (globe.centerLongitude < -180) globe.centerLongitude += 360;
+        }
     }
 
     // --- GLES globe (globe surface + day/night illumination + coastlines + borders + ring) ---
@@ -72,8 +80,8 @@ Item {
     Canvas {
         id: overlay
         anchors.fill: parent
-        renderTarget: Canvas.FramebufferObject
-        renderStrategy: Canvas.Cooperative
+        renderTarget: Canvas.Image
+        renderStrategy: Canvas.Immediate
 
         property real _lon: globe.centerLongitude
         property real _lat: globe.centerLatitude
@@ -221,7 +229,9 @@ Item {
         }
 
         onPaint: {
+            if (width <= 0 || height <= 0 || globe._radius <= 0) return;
             var ctx = getContext("2d");
+            if (!ctx) return;
             ctx.reset();
             ctx.clearRect(0, 0, width, height);
 
@@ -282,8 +292,15 @@ Item {
             if (!_dragging) return;
             var dx = mouse.x - _lastX;
             var dy = mouse.y - _lastY;
-            globe.centerLongitude -= dx * Const.DRAG_SENSITIVITY;
-            globe.centerLatitude += dy * Const.DRAG_SENSITIVITY;
+            var newLon = globe.centerLongitude - dx * Const.DRAG_SENSITIVITY;
+            var newLat = globe.centerLatitude + dy * Const.DRAG_SENSITIVITY;
+
+            while (newLon > 180) newLon -= 360;
+            while (newLon < -180) newLon += 360;
+            newLat = Math.max(-90.0, Math.min(90.0, newLat));
+
+            globe.centerLongitude = newLon;
+            globe.centerLatitude = newLat;
             _lastX = mouse.x;
             _lastY = mouse.y;
         }
@@ -301,8 +318,11 @@ Item {
         flyAnim.from = curLon;
         flyAnim.to = curLon + diff;
         flyAnim.start();
-        flyLatAnim.from = centerLatitude;
-        flyLatAnim.to = lat;
+
+        var curLat = centerLatitude;
+        var targetLat = Math.max(-90.0, Math.min(90.0, lat));
+        flyLatAnim.from = curLat;
+        flyLatAnim.to = targetLat;
         flyLatAnim.start();
     }
 
