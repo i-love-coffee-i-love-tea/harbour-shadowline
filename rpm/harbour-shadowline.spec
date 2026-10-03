@@ -1,7 +1,7 @@
 Name:       harbour-shadowline
 Summary:    Shadow Line — interactive daylight globe for Sailfish OS
-Version:    1.2.1
-Release:    3
+Version:    1.2.2
+Release:    1
 Group:      Utility
 License:    MIT
 URL:        https://github.com/gobuki/harbour-shadowline

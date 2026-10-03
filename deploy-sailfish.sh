@@ -13,7 +13,7 @@ ARG2="$2"
 
 if [ -n "$ARG1" ] && [ -f "$ARG1" ]; then
     RPM_PATH="$ARG1"
-    TARGET_HOST="$ARG2"
+    [ -n "$ARG2" ] && TARGET_HOST="$ARG2"
 elif [ -n "$ARG1" ]; then
     TARGET_HOST="$ARG1"
     RPM_PATH="$ARG2"

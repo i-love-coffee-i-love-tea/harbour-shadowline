@@ -14,6 +14,12 @@
   <metadata_license>CC0-1.0</metadata_license>
   <project_license>MIT</project_license>
   <releases>
+    <release version="1.2.2" date="2026-10-03">
+      <description>
+        <p>Fixed globe rendering on Xperia X and Xperia 10 III (SFOS &lt; 5.2).</p>
+        <p>Improved shader precision and alpha blending for broader GPU compatibility.</p>
+      </description>
+    </release>
     <release version="1.2.1" date="2026-10-03">
       <description>
         <p>Fixed location editing to properly persist changes to the database.</p>

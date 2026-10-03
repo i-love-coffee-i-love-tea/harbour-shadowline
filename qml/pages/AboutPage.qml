@@ -26,7 +26,7 @@ Page {
             Label {
                 x: Theme.horizontalPageMargin
                 width: parent.width - 2 * Theme.horizontalPageMargin
-                text: qsTr("Version 1.2.1")
+                text: qsTr("Version 1.2.2")
                 color: Theme.secondaryColor
                 font.pixelSize: Theme.fontSizeSmall
             }
