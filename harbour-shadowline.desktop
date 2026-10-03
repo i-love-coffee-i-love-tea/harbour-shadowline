@@ -4,6 +4,8 @@ Icon=harbour-shadowline
 Type=Application
 Name=Shadow Line
 X-Nemo-Application-Type=silica-qt5
-X-Sailjail-OrganizationName=harbour-shadowline
-X-Sailjail-ApplicationName=harbour-shadowline
-X-Sailjail-Permissions=UserDirs
+
+[X-Sailjail]
+OrganizationName=harbour-shadowline
+ApplicationName=harbour-shadowline
+Permissions=Location
