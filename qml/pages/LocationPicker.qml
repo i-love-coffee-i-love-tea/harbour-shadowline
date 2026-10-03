@@ -2,6 +2,7 @@ import QtQuick 2.6
 import QtPositioning 5.2
 import Sailfish.Silica 1.0
 import "../js/cities.js" as Cities
+import "../js/timezone_grid.js" as TzGrid
 
 Page {
     id: pickerPage
@@ -20,6 +21,13 @@ Page {
     function _filterCities(query) {
         _searchText = query;
         _filteredCities = Cities.filterCities(query);
+    }
+
+    function _tryUpdateTimezone() {
+        var lat = parseFloat(latField.text);
+        var lon = parseFloat(lonField.text);
+        if (!isNaN(lat) && !isNaN(lon) && lat >= -90 && lat <= 90 && lon >= -180 && lon <= 180)
+            offsetCombo.setTimezone(lat, lon);
     }
 
     SilicaFlickable {
@@ -82,6 +90,7 @@ Page {
                         inputMethodHints: Qt.ImhFormattedNumbersOnly
                         EnterKey.iconSource: "image://theme/icon-m-enter-next"
                         EnterKey.onClicked: lonField.focus = true
+                        onTextChanged: _tryUpdateTimezone()
                     }
 
                     TextField {
@@ -92,7 +101,58 @@ Page {
                         inputMethodHints: Qt.ImhFormattedNumbersOnly
                         EnterKey.iconSource: "image://theme/icon-m-enter-accept"
                         EnterKey.onClicked: addCustomBtn.clicked()
+                        onTextChanged: _tryUpdateTimezone()
                     }
+                }
+
+                ComboBox {
+                    id: offsetCombo
+                    width: parent.width
+                    label: qsTr("UTC offset")
+                    property var offsets: [
+                        -12, -11.5, -11, -10.5, -10, -9.5, -9, -8.5, -8, -7.5,
+                        -7, -6.5, -6, -5.5, -5, -4.5, -4, -3.5, -3, -2.5,
+                        -2, -1.5, -1, -0.5, 0, 0.5, 1, 1.5, 2, 2.5,
+                        3, 3.5, 4, 4.5, 5, 5.5, 5.75, 6, 6.5, 7,
+                        7.5, 8, 8.5, 8.75, 9, 9.5, 10, 10.5, 11, 11.5,
+                        12, 12.75, 13, 13.75, 14
+                    ]
+                    property real selectedOffset: offsets[currentIndex]
+
+                    menu: ContextMenu {
+                        Repeater {
+                            model: offsetCombo.offsets
+                            MenuItem {
+                                text: (modelData >= 0 ? "+" : "") + modelData
+                            }
+                        }
+                    }
+
+                    function _setOffsetValue(off) {
+                        var best = 0;
+                        for (var i = 0; i < offsets.length; i++) {
+                            if (Math.abs(offsets[i] - off) < Math.abs(offsets[best] - off))
+                                best = i;
+                        }
+                        currentIndex = best;
+                    }
+
+                    // Auto-detect timezone from coordinates using grid lookup
+                    function setTimezone(lat, lon) {
+                        var tz = TzGrid.lookup(lat, lon);
+                        if (tz) {
+                            _setOffsetValue(tz.o);
+                            dstSwitch.checked = (tz.d === 1);
+                        }
+                    }
+
+                    Component.onCompleted: setTimezone(0, 0)
+                }
+
+                TextSwitch {
+                    id: dstSwitch
+                    text: qsTr("Daylight saving time")
+                    description: qsTr("Enable if this location observes DST")
                 }
 
                 Row {
@@ -126,7 +186,8 @@ Page {
                             pickerPage.locationSelected({
                                 name: nameField.text,
                                 lat: lat,
-                                lon: lon
+                                lon: lon,
+                                off: { o: offsetCombo.selectedOffset, d: dstSwitch.checked ? 1 : 0 }
                             });
                             pageStack.pop();
                         }
@@ -149,6 +210,7 @@ Page {
                         if (position.latitudeValid && position.longitudeValid) {
                             latField.text = position.coordinate.latitude.toFixed(4);
                             lonField.text = position.coordinate.longitude.toFixed(4);
+                            // offset auto-detected via latField/lonField onTextChanged
                             active = false;
                         }
                     }
