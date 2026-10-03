@@ -21,6 +21,36 @@ Page {
         globe.repaint();
     }
 
+    function editLocation(loc, idx) {
+        var picker = pageStack.push(Qt.resolvedUrl("LocationPicker.qml"), {
+            editName: loc.name,
+            editLat: loc.lat,
+            editLon: loc.lon,
+            editOff: loc.off
+        });
+        picker.locationSelected.connect(function(updated) {
+            Store.updateLocation(loc.id, updated.name, updated.lat, updated.lon, updated.off);
+            var newList = locationList.slice();
+            newList[idx] = {
+                id: loc.id,
+                name: updated.name,
+                lat: updated.lat,
+                lon: updated.lon,
+                off: updated.off
+            };
+            locationList = newList;
+            locationListChanged();
+            if (globe.hasSelection &&
+                globe.selectedLat === loc.lat &&
+                globe.selectedLon === loc.lon) {
+                globe.selectedLat = updated.lat;
+                globe.selectedLon = updated.lon;
+            }
+            _updateGlobeLocations();
+            _refreshTick++;
+        });
+    }
+
     // --- UI ---
     SilicaFlickable {
         anchors.fill: parent
@@ -193,6 +223,14 @@ Page {
                                 text: qsTr("Pin to cover")
                                 onClicked: {
                                     Store.saveCoverLocationId(locationList[index].id);
+                                }
+                            }
+                            MenuItem {
+                                text: qsTr("Edit")
+                                onClicked: {
+                                    var idx = index;
+                                    var loc = locationList[idx];
+                                    mainPage.editLocation(loc, idx);
                                 }
                             }
                             MenuItem {

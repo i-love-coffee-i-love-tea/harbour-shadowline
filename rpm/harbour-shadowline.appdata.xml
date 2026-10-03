@@ -14,8 +14,9 @@
   <metadata_license>CC0-1.0</metadata_license>
   <project_license>MIT</project_license>
   <releases>
-    <release version="1.2.0" date="2026-10-03">
+    <release version="1.2.1" date="2026-10-03">
       <description>
+        <p>Fixed location editing to properly persist changes to the database.</p>
         <p>Custom locations now auto-detect timezone from coordinates using a bundled timezone boundary grid.</p>
         <p>Locations are editable after creation via context menu.</p>
         <p>UTC offset picker and DST toggle for manual timezone adjustment.</p>

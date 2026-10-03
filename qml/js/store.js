@@ -135,6 +135,20 @@ function removeLocation(id) {
     }
 }
 
+function updateLocation(id, name, lat, lon, off) {
+    var offO = (off && off.o !== undefined) ? off.o : null;
+    var offD = (off && off.d !== undefined) ? off.d : 0;
+    var db = openDb();
+    try {
+        db.transaction(function(tx) {
+            tx.executeSql("UPDATE locations SET name=?, lat=?, lon=?, off_o=?, off_d=? WHERE id=?",
+                          [name, lat, lon, offO, offD, id]);
+        });
+    } catch (e) {
+        console.warn("store.js: updateLocation failed (" + e.message + ")");
+    }
+}
+
 function loadSetting(key, defaultValue) {
     var db = openDb();
     var value = defaultValue;

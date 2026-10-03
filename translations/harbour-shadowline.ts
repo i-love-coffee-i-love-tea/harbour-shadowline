@@ -19,6 +19,26 @@
         <source>About</source>
         <translation>About</translation>
     </message>
+    <message>
+        <source>Locations</source>
+        <translation>Locations</translation>
+    </message>
+    <message>
+        <source>Pull down to add a location</source>
+        <translation>Pull down to add a location</translation>
+    </message>
+    <message>
+        <source>Pin to cover</source>
+        <translation>Pin to cover</translation>
+    </message>
+    <message>
+        <source>Edit</source>
+        <translation>Edit</translation>
+    </message>
+    <message>
+        <source>Delete</source>
+        <translation>Delete</translation>
+    </message>
 </context>
 <context>
     <name>LocationPicker</name>
@@ -27,8 +47,16 @@
         <translation>Add Location</translation>
     </message>
     <message>
+        <source>Edit Location</source>
+        <translation>Edit Location</translation>
+    </message>
+    <message>
         <source>Preset Cities</source>
         <translation>Preset Cities</translation>
+    </message>
+    <message>
+        <source>World Capitals</source>
+        <translation>World Capitals</translation>
     </message>
     <message>
         <source>Custom Location</source>
@@ -39,6 +67,10 @@
         <translation>Location name</translation>
     </message>
     <message>
+        <source>Name</source>
+        <translation>Name</translation>
+    </message>
+    <message>
         <source>Latitude (-90 to 90)</source>
         <translation>Latitude (-90 to 90)</translation>
     </message>
@@ -47,8 +79,48 @@
         <translation>Longitude (-180 to 180)</translation>
     </message>
     <message>
+        <source>Lat</source>
+        <translation>Lat</translation>
+    </message>
+    <message>
+        <source>Lon</source>
+        <translation>Lon</translation>
+    </message>
+    <message>
+        <source>Latitude</source>
+        <translation>Latitude</translation>
+    </message>
+    <message>
+        <source>Longitude</source>
+        <translation>Longitude</translation>
+    </message>
+    <message>
+        <source>UTC offset</source>
+        <translation>UTC offset</translation>
+    </message>
+    <message>
+        <source>Daylight saving time</source>
+        <translation>Daylight saving time</translation>
+    </message>
+    <message>
+        <source>Enable if this location observes DST</source>
+        <translation>Enable if this location observes DST</translation>
+    </message>
+    <message>
+        <source>Locating...</source>
+        <translation>Locating...</translation>
+    </message>
+    <message>
+        <source>Search cities</source>
+        <translation>Search cities</translation>
+    </message>
+    <message>
         <source>Add</source>
         <translation>Add</translation>
+    </message>
+    <message>
+        <source>Save</source>
+        <translation>Save</translation>
     </message>
 </context>
 <context>

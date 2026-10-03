@@ -7,10 +7,18 @@ import "../js/timezone_grid.js" as TzGrid
 Page {
     id: pickerPage
 
-    // Signal emitted when a location is selected: {name, lat, lon}
+    // Signal emitted when a location is selected: {name, lat, lon, off}
     signal locationSelected(var location)
 
+    // Set these after pushing or pass in properties object to pre-fill for editing
+    property string editName: ""
+    property real editLat: NaN
+    property real editLon: NaN
+    property var editOff: null   // {o, d} or null
+    readonly property bool editMode: !isNaN(editLat)
+
     property bool _nameManuallyEdited: false
+    property bool _initializing: true
 
     readonly property var presetCities: Cities.presetCities
 
@@ -24,10 +32,45 @@ Page {
     }
 
     function _tryUpdateTimezone() {
+        if (_initializing) return;
         var lat = parseFloat(latField.text);
         var lon = parseFloat(lonField.text);
         if (!isNaN(lat) && !isNaN(lon) && lat >= -90 && lat <= 90 && lon >= -180 && lon <= 180)
             offsetCombo.setTimezone(lat, lon);
+    }
+
+    function _applyEditData() {
+        if (!editMode) return;
+        _initializing = true;
+        _nameManuallyEdited = true;
+        nameField.text = editName;
+        latField.text = isNaN(editLat) ? "" : editLat.toFixed(4);
+        lonField.text = isNaN(editLon) ? "" : editLon.toFixed(4);
+        if (editOff && editOff.o !== undefined && editOff.o !== null) {
+            offsetCombo._setOffsetValue(editOff.o);
+            dstSwitch.checked = (editOff.d === 1);
+        } else if (!isNaN(editLat) && !isNaN(editLon)) {
+            offsetCombo.setTimezone(editLat, editLon);
+        }
+        _initializing = false;
+    }
+
+    Timer {
+        id: _initEditTimer
+        interval: 0
+        onTriggered: _applyEditData()
+    }
+
+    onEditModeChanged: {
+        if (editMode) _initEditTimer.restart();
+    }
+
+    Component.onCompleted: {
+        if (editMode) {
+            _initEditTimer.restart();
+        } else {
+            _initializing = false;
+        }
     }
 
     SilicaFlickable {
@@ -39,13 +82,14 @@ Page {
             width: parent.width
 
             PageHeader {
-                title: qsTr("Add Location")
+                title: editMode ? qsTr("Edit Location") : qsTr("Add Location")
             }
 
-            // Search field
+            // Search field (hidden in edit mode)
             SearchField {
                 id: searchField
                 width: parent.width
+                visible: !editMode
                 placeholderText: qsTr("Search cities")
                 onTextChanged: {
                     _filterCities(text);
@@ -59,6 +103,7 @@ Page {
 
             // Custom location section
             SectionHeader {
+                visible: !editMode
                 text: qsTr("Custom Location")
             }
 
@@ -146,7 +191,9 @@ Page {
                         }
                     }
 
-                    Component.onCompleted: setTimezone(0, 0)
+                    Component.onCompleted: {
+                        if (!editMode) setTimezone(0, 0);
+                    }
                 }
 
                 TextSwitch {
@@ -168,7 +215,7 @@ Page {
 
                     Button {
                         id: addCustomBtn
-                        text: qsTr("Add")
+                        text: editMode ? qsTr("Save") : qsTr("Add")
                         enabled: nameField.text.length > 0
                                  && !isNaN(parseFloat(latField.text))
                                  && !isNaN(parseFloat(lonField.text))
@@ -217,13 +264,14 @@ Page {
                 }
             }
 
-            // Preset cities list
+            // Preset cities list (hidden in edit mode)
             SectionHeader {
+                visible: !editMode
                 text: qsTr("World Capitals")
             }
 
             Repeater {
-                model: _filteredCities
+                model: editMode ? [] : _filteredCities
 
                 BackgroundItem {
                     width: column.width
