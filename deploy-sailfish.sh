@@ -24,7 +24,7 @@ if [ -z "$TARGET_HOST" ]; then
     if [ -n "$PHONE_HOST" ]; then
         TARGET_HOST="$PHONE_HOST"
     else
-        for candidate in phone-wifi phone-usb phone-bt 192.168.1.200 192.168.2.15 172.28.172.1; do
+        for candidate in xa2 xperia10 phone-wifi phone-usb phone-bt 192.168.1.105 192.168.1.101 192.168.1.200 192.168.2.15 172.28.172.1; do
             if ssh -o ConnectTimeout=2 -o BatchMode=yes "$candidate" true 2>/dev/null; then
                 TARGET_HOST="$candidate"
                 break
@@ -36,7 +36,7 @@ fi
 
 # 2. Verify SSH connectivity and target architecture
 echo "Checking connection to $TARGET_HOST..."
-REMOTE_INFO="$(ssh -o ConnectTimeout=5 "$TARGET_HOST" 'id -u; echo "$HOME"; uname -m' 2>/dev/null)" || {
+REMOTE_INFO="$(ssh -o ConnectTimeout=5 "$TARGET_HOST" 'id -u; echo "$HOME"; ARCH=$(rpm -E "%{_arch}" 2>/dev/null); [ "$ARCH" = "arm" ] && ARCH=armv7hl; echo "${ARCH:-$(uname -m)}"' 2>/dev/null)" || {
     echo "ERROR: Cannot connect to $TARGET_HOST. Check SSH and developer mode."
     exit 1
 }

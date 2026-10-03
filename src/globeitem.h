@@ -58,6 +58,7 @@ signals:
 
 protected:
     void geometryChanged(const QRectF &newGeom, const QRectF &oldGeom) override;
+    QSGNode *updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *data) override;
 
 private:
     void updateSunPosition();

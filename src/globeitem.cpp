@@ -4,6 +4,7 @@
 #include <QDateTime>
 #include <QTimer>
 #include <QQuickWindow>
+#include <QSGSimpleTextureNode>
 #include <QOpenGLFunctions>
 #include <QOpenGLFramebufferObject>
 #include <QOpenGLBuffer>
@@ -27,7 +28,7 @@ static const double RAD2DEG = 180.0 / M_PI;
 
 static const char *GLOBE_VERT =
     "#ifdef GL_ES\n"
-    "precision mediump float;\n"
+    "precision highp float;\n"
     "#endif\n"
     "attribute vec2 a_pos;\n"
     "varying vec2 v_pos;\n"
@@ -38,7 +39,11 @@ static const char *GLOBE_VERT =
 
 static const char *GLOBE_FRAG =
     "#ifdef GL_ES\n"
+    "#if defined(GL_FRAGMENT_PRECISION_HIGH)\n"
+    "precision highp float;\n"
+    "#else\n"
     "precision mediump float;\n"
+    "#endif\n"
     "#endif\n"
     "varying vec2 v_pos;\n"
     "uniform vec2 u_normR;\n"
@@ -52,8 +57,8 @@ static const char *GLOBE_FRAG =
     "uniform vec4 u_nightColor;\n"
     "uniform vec4 u_sunColor;\n"
     "void main() {\n"
-    "    vec2 posPix = v_pos * u_fboHalf;\n"
-    "    float rPix = length(posPix);\n"
+    "    vec2 posNorm = v_pos * vec2(1.0, u_fboHalf.y / u_fboHalf.x);\n"
+    "    float rPix = length(posNorm) * u_fboHalf.x;\n"
     "    float actualRPix = u_normR.x * u_fboHalf.x;\n"
     "    float dr = rPix - actualRPix;\n"
     "    float maxDr = 8.0 * u_dpr;\n"
@@ -64,7 +69,7 @@ static const char *GLOBE_FRAG =
     "    float dLonSun = u_sunLonR - u_cLonR;\n"
     "    vec2 sunDir = vec2(cosSLat * sin(dLonSun), cosCLat * sinSLat - sinCLat * cosSLat * cos(dLonSun));\n"
     "    float sunDirLen = length(sunDir);\n"
-    "    float cosLimb = (sunDirLen > 0.001 && rPix > 0.001) ? dot(posPix / rPix, sunDir / sunDirLen) : 0.0;\n"
+    "    float cosLimb = (sunDirLen > 0.001 && rPix > 0.001) ? dot(normalize(posNorm), sunDir / sunDirLen) : 0.0;\n"
     "    float sunScatter = smoothstep(-0.14, 0.28, cosLimb);\n"
     "    sunScatter = sunScatter * sunScatter * (3.0 - 2.0 * sunScatter);\n"
     "    float limbIntensity = mix(0.18, 1.0, sunScatter);\n"
@@ -103,7 +108,7 @@ static const char *GLOBE_FRAG =
 
 static const char *LINE_VERT =
     "#ifdef GL_ES\n"
-    "precision mediump float;\n"
+    "precision highp float;\n"
     "#endif\n"
     "attribute vec2 a_geo;\n"
     "uniform float u_cLatR;\n"
@@ -141,7 +146,7 @@ static const char *LINE_FRAG =
 
 static const char *RING_VERT =
     "#ifdef GL_ES\n"
-    "precision mediump float;\n"
+    "precision highp float;\n"
     "#endif\n"
     "attribute vec2 a_pos;\n"
     "varying vec2 v_pos;\n"
@@ -152,7 +157,11 @@ static const char *RING_VERT =
 
 static const char *RING_FRAG =
     "#ifdef GL_ES\n"
+    "#if defined(GL_FRAGMENT_PRECISION_HIGH)\n"
+    "precision highp float;\n"
+    "#else\n"
     "precision mediump float;\n"
+    "#endif\n"
     "#endif\n"
     "varying vec2 v_pos;\n"
     "uniform vec2 u_normR;\n"
@@ -160,8 +169,8 @@ static const char *RING_FRAG =
     "uniform float u_dpr;\n"
     "uniform vec4 u_color;\n"
     "void main() {\n"
-    "    vec2 posPix = v_pos * u_fboHalf;\n"
-    "    float rPix = length(posPix);\n"
+    "    vec2 posNorm = v_pos * vec2(1.0, u_fboHalf.y / u_fboHalf.x);\n"
+    "    float rPix = length(posNorm) * u_fboHalf.x;\n"
     "    float actualRPix = u_normR.x * u_fboHalf.x;\n"
     "    float dr = abs(rPix - actualRPix);\n"
     "    float maxDr = 1.2 * u_dpr;\n"
@@ -232,7 +241,7 @@ QOpenGLFramebufferObject *GlobeRenderer::createFramebufferObject(const QSize &si
     m_fboH = fboSize.height();
     logDebug("createFramebufferObject: req=%dx%d, fbo=%dx%d\n", size.width(), size.height(), m_fboW, m_fboH);
     QOpenGLFramebufferObjectFormat format;
-    format.setAttachment(QOpenGLFramebufferObject::CombinedDepthStencil);
+    format.setAttachment(QOpenGLFramebufferObject::NoAttachment);
     format.setInternalTextureFormat(GL_RGBA);
     return new QOpenGLFramebufferObject(fboSize, format);
 }
@@ -333,6 +342,8 @@ void GlobeRenderer::render() {
     logDebug("GlobeRenderer::render: cur=%dx%d, R=%f, item=%fx%f\n", curW, curH, m_R, m_itemW, m_itemH);
     if (curW <= 1 || curH <= 1 || m_R <= 1.0 || m_itemW <= 1.0 || m_itemH <= 1.0) {
         logDebug("GlobeRenderer::render: skip render (dimensions invalid)\n");
+        glDisable(GL_SCISSOR_TEST);
+        glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
         glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
         glClear(GL_COLOR_BUFFER_BIT);
         return;
@@ -344,13 +355,15 @@ void GlobeRenderer::render() {
     }
 
     glViewport(0, 0, curW, curH);
+    glDisable(GL_SCISSOR_TEST);
+    glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
     glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
-    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    glClear(GL_COLOR_BUFFER_BIT);
 
     glDisable(GL_DEPTH_TEST);
     glDisable(GL_CULL_FACE);
     glEnable(GL_BLEND);
-    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    glBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
 
     drawGlobe(curW, curH);
     drawLines(m_borderVbo, m_borderOffsets.data(), m_borderSegCount, m_borderColor, 0.8f);
@@ -535,6 +548,15 @@ void GlobeItem::geometryChanged(const QRectF &n, const QRectF &o) {
     QQuickFramebufferObject::geometryChanged(n, o);
     emit radiusChanged();
     update();
+}
+
+QSGNode *GlobeItem::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *data) {
+    QSGNode *node = QQuickFramebufferObject::updatePaintNode(oldNode, data);
+    if (node) {
+        auto *textureNode = static_cast<QSGSimpleTextureNode *>(node);
+        textureNode->setOpaqueMaterial(nullptr);
+    }
+    return node;
 }
 
 void GlobeItem::updateSunPosition() {
