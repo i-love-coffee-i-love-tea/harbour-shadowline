@@ -1,22 +1,22 @@
 #!/bin/bash
 # Build harbour-shadowline for Sailfish OS via sfdk shadow build.
 #
-# Builds for all three architectures against SailfishOS-5.1.0.11.
+# Builds for all three architectures against SailfishOS-4.6.0.13.
 #
 # Prerequisites:
 #   - Sailfish SDK installed with Docker engine
 #   - sfdk in PATH (e.g. ~/SailfishOS/bin/sfdk)
-#   - Build targets installed: SailfishOS-5.1.0.11-{i486,armv7hl,aarch64}
+#   - Build targets installed: SailfishOS-4.6.0.13-{i486,armv7hl,aarch64}
 #
 # Usage:
 #   ./build-sailfish.sh                  # build all three arches
 #   ./build-sailfish.sh aarch64          # build one arch only
-#   SAILFISH_VERSION=4.6.0.13 ./build-sailfish.sh  # override SDK version
+#   SAILFISH_VERSION=5.1.0.11 ./build-sailfish.sh  # override SDK version
 
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-VERSION="${SAILFISH_VERSION:-5.1.0.11}"
+VERSION="${SAILFISH_VERSION:-4.6.0.13}"
 ALL_ARCHES="i486 armv7hl aarch64"
 ARCHES="${*:-$ALL_ARCHES}"
 
